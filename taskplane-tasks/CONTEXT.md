@@ -14,6 +14,11 @@ to a specific domain area are created here.
 Taskplane is configured and ready for task execution. Use `/task` for single
 tasks or `/orch all` for parallel batch execution.
 
+Planner-compiled packets use phase-specific context documents alongside this
+base context:
+- `taskplane-tasks/PHASE-IMPLEMENTATION.md`
+- `taskplane-tasks/PHASE-CONFORMANCE.md`
+
 ---
 
 ## Key Files
@@ -21,6 +26,9 @@ tasks or `/orch all` for parallel batch execution.
 | Category | Path |
 |----------|------|
 | Tasks | `taskplane-tasks/` |
+| Context | `taskplane-tasks/CONTEXT.md` |
+| Phase | `taskplane-tasks/PHASE-IMPLEMENTATION.md` |
+| Phase | `taskplane-tasks/PHASE-CONFORMANCE.md` |
 | Config | `.pi/task-runner.yaml` |
 | Config | `.pi/task-orchestrator.yaml` |
 
