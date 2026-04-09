@@ -1,8 +1,9 @@
 {
-  "name": "pi-taskplane-planner",
+  "name": "@casualjim/pi-taskplane-planner",
+  "version": "0.1.0",
   "module": "index.ts",
   "type": "module",
-  "private": true,
+  "private": false,
   "description": "Planner-native pi extension and CLI companion to Taskplane",
   "keywords": [
     "pi-package",
@@ -18,7 +19,12 @@
     "bin/",
     "extensions/",
     "src/",
-    ".pi/prompts/",
+    ".pi/prompts/plan-explore.md",
+    ".pi/prompts/plan-propose.md",
+    ".pi/prompts/plan-status.md",
+    ".pi/prompts/plan-stage.md",
+    ".pi/prompts/plan-archive.md",
+    ".pi/prompts/plan-reopen.md",
     "index.ts",
     "README.md"
   ],
@@ -32,6 +38,22 @@
     "test": "bun test",
     "test:runtime-e2e": "PLANNER_RUNTIME_E2E=1 bun test tests/runtime-e2e.test.mjs"
   },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/casualjim/pi-taskplane-planner.git"
+  },
+  "homepage": "https://github.com/casualjim/pi-taskplane-planner#readme",
+  "bugs": {
+    "url": "https://github.com/casualjim/pi-taskplane-planner/issues"
+  },
+  "license": "MIT",
+  "author": "casualjim",
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.9.2"

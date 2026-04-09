@@ -1,4 +1,4 @@
-# pi-taskplane-planner
+# @casualjim/pi-taskplane-planner
 
 A planner-native pi extension and CLI companion to Taskplane.
 
@@ -65,17 +65,21 @@ planner-specific runtime prompt logic.
 
 ## Installation
 
-Install this package through `pi` so the extension and slash commands are
-registered in pi's package list.
+This package is published to npm as `@casualjim/pi-taskplane-planner` and requires Node.js 24+.
+
+### Install for pi
 
 ```bash
-pi install /absolute/path/to/pi-taskplane-planner
-# or project-local:
-pi install -l /absolute/path/to/pi-taskplane-planner
+pi install npm:@casualjim/pi-taskplane-planner
 ```
 
-Then restart or `/reload` pi. `npm install` alone will not make the extension
-show up in pi. Use `pi list` to confirm the package is registered.
+### Install the CLI on your PATH
+
+```bash
+npm install -g @casualjim/pi-taskplane-planner
+```
+
+Then restart or `/reload` pi. Use `pi list` to confirm the package is registered.
 
 ## Quickstart
 
@@ -146,6 +150,16 @@ proves the runtime worker reads `PHASE-IMPLEMENTATION.md`, then probes a planner
 packet and proves that the runtime worker reads `PHASE-CONFORMANCE.md` at the correct phase boundary.
 The test then writes a deterministic `ARCHIVE_READY` conformance report from the harness and archives
 the change.
+
+## Publishing
+
+Publishing is automated through GitHub Actions:
+
+- `release-please` opens version bump PRs from conventional commits on `main`
+- merging the release PR creates the tag and GitHub Release
+- the published release triggers `npm publish` with trusted publishing
+- npmjs needs a Trusted Publisher entry for this repo
+- npm trusted publishing means no long-lived npm token secret is needed in GitHub
 
 ## Notes
 

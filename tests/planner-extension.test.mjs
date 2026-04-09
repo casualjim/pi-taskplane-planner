@@ -7,21 +7,57 @@ import registerPlannerExtension, {
   stripPromptFrontmatter,
 } from "../extensions/planner-extension.mjs";
 
-describe("planner pi extension packaging", () => {
-  test("package manifest declares the planner extension entrypoint", async () => {
-    const pkgPath = path.resolve(import.meta.dir, "../package.json");
-    const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+const root = path.resolve(import.meta.dir, "..");
 
+async function readProjectFile(...segments) {
+  return readFile(path.join(root, ...segments), "utf8");
+}
+
+describe("planner npm package and extension", () => {
+  test("package manifest declares publishable npm metadata", async () => {
+    const pkg = JSON.parse(await readProjectFile("package.json"));
+
+    expect(pkg.name).toBe("@casualjim/pi-taskplane-planner");
+    expect(pkg.version).toBe("0.1.0");
+    expect(pkg.private).toBe(false);
+    expect(pkg.license).toBe("MIT");
+    expect(pkg.publishConfig).toEqual({ access: "public" });
+    expect(pkg.bin).toEqual({ planner: "bin/planner.mjs" });
     expect(pkg.files).toEqual([
       "bin/",
       "extensions/",
       "src/",
-      ".pi/prompts/",
+      ".pi/prompts/plan-explore.md",
+      ".pi/prompts/plan-propose.md",
+      ".pi/prompts/plan-status.md",
+      ".pi/prompts/plan-stage.md",
+      ".pi/prompts/plan-archive.md",
+      ".pi/prompts/plan-reopen.md",
       "index.ts",
       "README.md",
     ]);
     expect(pkg.pi.extensions).toEqual(["./extensions/planner-extension.mjs"]);
-    expect(pkg.pi.prompts).toBeUndefined();
+    expect(pkg.repository.url).toContain("github.com/casualjim/pi-taskplane-planner");
+    expect(pkg.homepage).toContain("github.com/casualjim/pi-taskplane-planner");
+    expect(pkg.bugs.url).toContain("github.com/casualjim/pi-taskplane-planner/issues");
+    expect(pkg.engines.node).toBe(">=24.0.0");
+  });
+
+  test("release automation workflows exist", async () => {
+    const ci = await readProjectFile(".github/workflows/ci.yml");
+    const releasePlease = await readProjectFile(".github/workflows/release-please.yml");
+    const publish = await readProjectFile(".github/workflows/publish.yml");
+
+    expect(ci).toContain("bun install");
+    expect(ci).toContain("bun test");
+    expect(ci).toContain("bunx tsc --noEmit");
+
+    expect(releasePlease).toContain("googleapis/release-please-action@v4");
+    expect(releasePlease).toContain("release-type: node");
+
+    expect(publish).toContain("npm publish --provenance --access public");
+    expect(publish).toContain("id-token: write");
+    expect(publish).toContain("registry.npmjs.org");
   });
 
   test("planner command specs are loaded from internal prompt assets", () => {

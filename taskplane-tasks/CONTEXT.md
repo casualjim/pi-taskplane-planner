@@ -1,6 +1,6 @@
 # General — Context
 
-**Last Updated:** 2026-04-06
+**Last Updated:** 2026-04-09
 **Status:** Active
 **Next Task ID:** TP-002
 
@@ -8,7 +8,7 @@
 
 ## Current State
 
-This is the default task area for pi-taskplane-planner. Tasks that don't belong
+This is the default task area for @casualjim/pi-taskplane-planner. Tasks that don't belong
 to a specific domain area are created here.
 
 Taskplane is configured and ready for task execution. Use `/task` for single
