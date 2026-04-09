@@ -3,18 +3,28 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "description": "Planner-native pi extension and CLI companion to Taskplane",
   "keywords": [
     "pi-package",
     "planner",
     "taskplane",
+    "extension",
     "specs"
   ],
   "bin": {
     "planner": "bin/planner.mjs"
   },
+  "files": [
+    "bin/",
+    "extensions/",
+    "src/",
+    ".pi/prompts/",
+    "index.ts",
+    "README.md"
+  ],
   "pi": {
-    "prompts": [
-      "./.pi/prompts/plan-*.md"
+    "extensions": [
+      "./extensions/planner-extension.mjs"
     ]
   },
   "scripts": {

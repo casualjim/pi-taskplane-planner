@@ -1,6 +1,6 @@
 # pi-taskplane-planner
 
-A planner-native companion to Taskplane.
+A planner-native pi extension and CLI companion to Taskplane.
 
 This project builds a strict planning layer that turns ambiguous change requests
 into explicit contracts and then compiles those contracts into Taskplane-native
@@ -17,13 +17,14 @@ execution packets.
   - `planner stage <change>`
   - `planner archive <change>`
   - `planner reopen <change> [reason]`
-- **Pi prompt templates** for day-to-day workflow
+- **Pi extension commands** for day-to-day workflow
   - `/plan-explore`
   - `/plan-propose`
   - `/plan-status`
   - `/plan-stage`
   - `/plan-archive`
   - `/plan-reopen`
+- **Internal prompt assets** under `.pi/prompts/` that back those commands
 - **Taskplane packet generation**
   - one implementation packet per capability spec
   - one terminal conformance packet per change
@@ -62,6 +63,20 @@ The phase documents are project-owned Taskplane context files. Planner-generated
 packets reference them so phase behavior lives in Taskplane docs rather than in
 planner-specific runtime prompt logic.
 
+## Installation
+
+Install this package through `pi` so the extension and slash commands are
+registered in pi's package list.
+
+```bash
+pi install /absolute/path/to/pi-taskplane-planner
+# or project-local:
+pi install -l /absolute/path/to/pi-taskplane-planner
+```
+
+Then restart or `/reload` pi. `npm install` alone will not make the extension
+show up in pi. Use `pi list` to confirm the package is registered.
+
 ## Quickstart
 
 ### 1. Seed planner-native scaffold
@@ -83,6 +98,8 @@ This creates:
 - `planning/changes/add-planner-status/specs/status-reporting/spec.md`
 
 ### 3. Use planner commands in pi
+
+These commands are registered by the extension you installed above.
 
 Inside `pi`:
 
