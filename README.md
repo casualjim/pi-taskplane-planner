@@ -156,6 +156,8 @@ the change.
 Publishing is automated through GitHub Actions:
 
 - `release-please` opens version bump PRs after the `CI` workflow succeeds on `main`
+- the release config uses `release-please-config.json` plus `.release-please-manifest.json` to bootstrap the package at `0.1.0`
+- release versions are patch-only by default (`always-bump-patch`)
 - merging the release PR creates the tag and GitHub Release
 - the published release triggers `npm publish` with trusted publishing
 - npmjs needs a Trusted Publisher entry for this repo

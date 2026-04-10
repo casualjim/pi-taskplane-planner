@@ -43,10 +43,12 @@ describe("planner npm package and extension", () => {
     expect(pkg.engines.node).toBe(">=24.0.0");
   });
 
-  test("release automation workflows exist", async () => {
+  test("release automation workflows and bootstrap config exist", async () => {
     const ci = await readProjectFile(".github/workflows/ci.yml");
     const releasePlease = await readProjectFile(".github/workflows/release-please.yml");
     const publish = await readProjectFile(".github/workflows/publish.yml");
+    const releaseConfig = JSON.parse(await readProjectFile("release-please-config.json"));
+    const releaseManifest = JSON.parse(await readProjectFile(".release-please-manifest.json"));
 
     expect(ci).toContain("bun install");
     expect(ci).toContain("bun test");
@@ -55,7 +57,18 @@ describe("planner npm package and extension", () => {
     expect(releasePlease).toContain("workflow_run");
     expect(releasePlease).toContain("conclusion == 'success'");
     expect(releasePlease).toContain("googleapis/release-please-action@v4");
-    expect(releasePlease).toContain("release-type: node");
+    expect(releasePlease).toContain("config-file: release-please-config.json");
+    expect(releasePlease).toContain("manifest-file: .release-please-manifest.json");
+
+    expect(releaseConfig).toEqual({
+      packages: {
+        ".": {
+          "release-type": "node",
+          "versioning-strategy": "always-bump-patch",
+        },
+      },
+    });
+    expect(releaseManifest).toEqual({ ".": "0.1.0" });
 
     expect(publish).toContain("npm publish --provenance --access public");
     expect(publish).toContain("id-token: write");
