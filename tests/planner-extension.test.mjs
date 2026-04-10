@@ -64,7 +64,7 @@ describe("planner npm package and extension", () => {
       packages: {
         ".": {
           "release-type": "node",
-          "versioning-strategy": "always-bump-patch",
+          "bump-patch-for-minor-pre-major": true,
         },
       },
     });
