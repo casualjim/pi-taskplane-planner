@@ -52,6 +52,8 @@ describe("planner npm package and extension", () => {
     expect(ci).toContain("bun test");
     expect(ci).toContain("bunx tsc --noEmit");
 
+    expect(releasePlease).toContain("workflow_run");
+    expect(releasePlease).toContain("conclusion == 'success'");
     expect(releasePlease).toContain("googleapis/release-please-action@v4");
     expect(releasePlease).toContain("release-type: node");
 

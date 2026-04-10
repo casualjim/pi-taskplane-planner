@@ -155,7 +155,7 @@ the change.
 
 Publishing is automated through GitHub Actions:
 
-- `release-please` opens version bump PRs from conventional commits on `main`
+- `release-please` opens version bump PRs after the `CI` workflow succeeds on `main`
 - merging the release PR creates the tag and GitHub Release
 - the published release triggers `npm publish` with trusted publishing
 - npmjs needs a Trusted Publisher entry for this repo
