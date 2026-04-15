@@ -1,7 +1,16 @@
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createConformanceReportTemplate } from "./conformance.mjs";
-import { extractBacktickedPaths, extractRequirementNames, getSection, uniqueNonEmpty } from "./markdown.mjs";
+import {
+  extractBacktickedPaths,
+  extractChecklistItems,
+  extractLikelyPaths,
+  extractRequirementNames,
+  extractScenarioNames,
+  firstNonEmpty,
+  getSection,
+  uniqueNonEmpty,
+} from "./markdown.mjs";
 
 export function buildImplementationPrompt({
   taskId,
@@ -10,46 +19,106 @@ export function buildImplementationPrompt({
   capabilityName,
   proposalPath,
   designPath,
+  tasksPath,
   specPath,
   proposal,
   design,
+  tasks,
   spec,
   areaContextPath,
   phaseContextPath,
 }) {
-  const proposalSummary = getSection(proposal, "Change Summary", 2) || `Implement approved change ${changeSlug}.`;
-  const requestedDelta = getSection(design, "Requested Delta", 2);
-  const preservation = getSection(design, "Preservation Constraints", 2);
-  const interfaceDelta = getSection(design, "Public Interface Deltas", 2);
-  const editSurface = getSection(design, "Module Ownership and Edit Surface", 2);
-  const behavior = getSection(design, "Behavioral Semantics", 2);
-  const failureSemantics = getSection(design, "Failure / Edge Case Semantics", 2);
+  const whatChanges = getSection(proposal, "What Changes", 2);
+  const impact = getSection(proposal, "Impact", 2);
+  const scopeBoundaries = getSection(proposal, "Scope Boundaries", 2);
+  const outOfScope = getSection(scopeBoundaries, "Out of Scope", 3);
+  const goalsAndNonGoals = getSection(design, "Goals / Non-Goals", 2);
+  const decisions = firstNonEmpty(getSection(design, "Key Decisions", 2), getSection(design, "Decisions", 2));
+  const risks = getSection(design, "Risks / Trade-offs", 2);
+  const openQuestions = getSection(design, "Open Questions", 2);
   const proof = getSection(design, "Proof Obligations", 2);
-  const acceptance = getSection(proof, "Acceptance", 3);
-  const nonRegression = getSection(proof, "Non-Regression", 3);
-  const requiredTests = getSection(proof, "Required Tests", 3);
-  const docsExamples = getSection(proof, "Documentation and Examples", 3);
-  const repoGates = getSection(proof, "Repo Gates", 3);
+  const proposalSummary = firstNonEmpty(getSection(proposal, "Change Summary", 2), whatChanges, `Implement approved change ${changeSlug}.`);
+  const requestedDelta = firstNonEmpty(
+    getSection(design, "Requested Delta", 2),
+    whatChanges,
+    formatBulletList(extractChecklistItems(tasks), ""),
+    `Implement the approved change contract exactly as written.`,
+  );
+  const preservation = firstNonEmpty(
+    getSection(design, "Preservation Constraints", 2),
+    outOfScope,
+    goalsAndNonGoals,
+    "Stay within the approved proposal, design, and delta spec. If implementation requires a contract change, stop and reopen planning.",
+  );
+  const interfaceDelta = firstNonEmpty(
+    getSection(design, "Public Interface Deltas", 2),
+    impact,
+    "No explicit public or cross-module interface delta was recorded; preserve existing interfaces unless the approved specs require a change.",
+  );
+  const editSurface = getSection(design, "Module Ownership and Edit Surface", 2);
+  const behavior = firstNonEmpty(
+    getSection(design, "Behavioral Semantics", 2),
+    decisions,
+    formatBulletList(extractRequirementNames(spec).map((name) => `Satisfy requirement: ${name}`), ""),
+    "Follow the approved behavior described in the delta spec.",
+  );
+  const failureSemantics = firstNonEmpty(
+    getSection(design, "Failure / Edge Case Semantics", 2),
+    risks,
+    openQuestions,
+    formatBulletList(extractScenarioNames(spec).map((name) => `Cover scenario: ${name}`), ""),
+    "Preserve current failure behavior unless the approved contract explicitly changes it.",
+  );
+  const acceptance = firstNonEmpty(
+    getSection(proof, "Acceptance", 3),
+    formatBulletList(extractScenarioNames(spec).map((name) => `Scenario passes: ${name}`), ""),
+  );
+  const nonRegression = firstNonEmpty(
+    getSection(proof, "Non-Regression", 3),
+    outOfScope,
+    "Preserve behavior outside the approved change contract.",
+  );
+  const requiredTests = firstNonEmpty(
+    getSection(proof, "Required Tests", 3),
+    formatBulletList(extractScenarioNames(spec).map((name) => `Add or update coverage for scenario: ${name}`), ""),
+    "Add or update tests that prove the approved delta spec scenarios.",
+  );
+  const docsExamples = firstNonEmpty(
+    getSection(proof, "Documentation and Examples", 3),
+    formatDocExampleFallback(interfaceDelta, impact),
+  );
+  const repoGates = firstNonEmpty(
+    getSection(proof, "Repo Gates", 3),
+    "Run the repository's standard validation commands that cover the touched files before finishing.",
+  );
   const requirements = extractRequirementNames(spec);
-  const fileScope = uniqueNonEmpty([
-    ...extractBacktickedPaths(editSurface),
-    ...extractBacktickedPaths(interfaceDelta),
-    ...extractBacktickedPaths(docsExamples),
-  ]);
-
-  if (fileScope.length === 0) {
-    throw new Error(`No file-scope paths could be inferred for ${changeSlug}; add backticked paths to 'Module Ownership and Edit Surface' or related sections before staging.`);
-  }
+  const fileScope = inferFileScope({
+    proposalPath,
+    designPath,
+    tasksPath,
+    specPath,
+    editSurface,
+    interfaceDelta,
+    docsExamples,
+    impact,
+    tasks,
+  });
+  const exactEditTargets = firstNonEmpty(
+    editSurface,
+    fileScope.length > 0 ? formatPathList(fileScope) : "",
+    formatBulletList(extractChecklistItems(tasks), ""),
+    "Infer the smallest edit surface from the approved OpenSpec artifacts before editing. If execution reveals broader scope, record it in STATUS.md before proceeding.",
+  );
 
   return `# Task: ${taskId} — ${changeSlug} / ${capabilityName}
 
 **Created:** ${today()}
 **Change:** ${changeSlug}
-**Size:** M
+**Size:** L
 
 ## Review Level: 2 (Plan + Code)
 
-**Assessment:** Capability implementation packet generated from the approved planner contract.
+**Assessment:** Capability implementation packet generated from the approved change contract.
 **Score:** 4/8 — Blast radius: 1, Pattern novelty: 1, Security: 0, Reversibility: 2
 
 ## Canonical Task Folder
@@ -58,7 +127,7 @@ ${renderCanonicalTaskFolder(folderPath)}
 
 ## Mission
 
-Implement the approved capability \`${capabilityName}\` for change \`${changeSlug}\`. This task realizes one approved contract slice from the planner proposal, design, and delta spec without inventing new behavior or broadening scope.
+Implement the approved capability \`${capabilityName}\` for change \`${changeSlug}\`. This task realizes one approved contract slice from the proposal, design, delta spec, and any generated OpenSpec implementation checklist without inventing new behavior or broadening scope.
 
 **Change summary:**
 ${cleanBlock(proposalSummary)}
@@ -73,7 +142,13 @@ ${formatBulletList(requirements, "- No explicit requirement titles were extracte
 ${cleanBlock(behavior, "Follow the approved behavior described in the design and spec.")}
 
 **Failure / edge-case semantics:**
-${cleanBlock(failureSemantics, "Follow the approved failure and edge-case handling described in the design.")}
+${cleanBlock(failureSemantics, "Follow the approved failure and edge-case handling described in the design and spec.")}
+
+## Contract References
+
+- \`${proposalPath}\` — approved change intent, scope, and impact
+- \`${designPath}\` — approved design decisions and implementation constraints
+${tasksPath ? `- \`${tasksPath}\` — OpenSpec implementation checklist and sequencing context\n` : ""}- \`${specPath}\` — capability requirements and scenarios
 
 ## Dependencies
 
@@ -87,8 +162,8 @@ ${cleanBlock(failureSemantics, "Follow the approved failure and edge-case handli
 
 **Tier 3 (load only if needed):**
 - \`${proposalPath}\` — approved change intent and scope boundaries
-- \`${designPath}\` — requested delta, preservation constraints, and proof obligations
-- \`${specPath}\` — capability requirements and scenarios
+- \`${designPath}\` — approved design decisions and constraints
+${tasksPath ? `- \`${tasksPath}\` — approved implementation checklist context\n` : ""}- \`${specPath}\` — capability requirements and scenarios
 
 ## Environment
 
@@ -97,11 +172,11 @@ ${cleanBlock(failureSemantics, "Follow the approved failure and edge-case handli
 
 ## File Scope
 
-${formatPathList(fileScope)}
+${formatFileScope(fileScope)}
 
 ## Exact Edit Targets
 
-${cleanBlock(editSurface, "Use the approved module ownership and edit surface from the design.")}
+${cleanBlock(exactEditTargets, "Use the approved module ownership and edit surface from the contract.")}
 
 ## Public Interface Delta
 
@@ -118,28 +193,14 @@ ${cleanBlock(preservation, "Preserve the approved interfaces, tests, and operato
 - [ ] Read the contract references and confirm the task remains within the approved change contract
 - [ ] Confirm the current code snapshot still matches the approved edit surface before modifying files
 
-### Step 1: Implement the approved capability slice
+### Step 1: Complete the capability slice end to end
 
-- [ ] Apply the requested delta for \`${capabilityName}\` inside the approved module ownership and edit surface
-- [ ] Implement the approved behavioral semantics and exact failure or edge-case semantics from the design and spec
-- [ ] Preserve all stated constraints and do not alter interfaces beyond the approved delta
+- [ ] Apply the requested delta for \`${capabilityName}\` inside the approved edit surface and preserve all stated constraints
+- [ ] Finish the slice completely before closing the step: include required code changes, tests, docs/examples, and interface-preservation work together
+- [ ] Run targeted validation while iterating, then run the required repo gates and leave the repository in a fully passing state
 
 **Artifacts:**
-${formatPathList(fileScope)}
-
-### Step 2: Tests and verification work
-
-- [ ] Add or update the required tests for this capability, including adversarial coverage
-- [ ] Run targeted validation while iterating on the implementation
-
-### Step 3: Documentation and examples
-
-- [ ] Update the required docs and examples for this capability slice
-- [ ] Review adjacent docs or examples listed in the proof obligations and update them if affected
-
-### Step 4: Repo gates
-
-- [ ] Run the required repo gates and leave the repository in a fully passing state
+${formatFileScope(fileScope)}
 
 ## Testing & Verification
 
@@ -156,7 +217,8 @@ ${formatBulletBlock(docsExamples, "- None required by the approved contract.")}
 
 **Check If Affected:**
 - \`${proposalPath}\` — keep approved change summary aligned if documentation wording or scope evidence changes
-- \`${designPath}\` — keep edit surface and proof obligations aligned if implementation reveals a contract discrepancy
+- \`${designPath}\` — keep implementation constraints aligned if execution reveals a contract discrepancy
+${tasksPath ? `- \`${tasksPath}\` — keep sequencing aligned if implementation evidence shows the checklist was incomplete\n` : ""}
 
 ## Completion Criteria
 
@@ -182,6 +244,7 @@ ${formatBulletBlock(nonRegression, "- No additional non-regression bullets were 
 - Do not broaden this task into an architectural rewrite
 - Do not alter public or cross-module interfaces beyond the approved delta
 - Do not weaken tests, adversarial coverage, docs, or examples to make the task pass
+- Do not split implementation, tests, documentation, and repo gates into separate phases when the slice can be completed end to end
 - Do not skip repo gates
 - Escalate instead of guessing if the code snapshot no longer matches the approved edit surface
 
@@ -202,7 +265,7 @@ export function buildImplementationStatus({ taskId, changeSlug, capabilityName }
 **Review Level:** 2
 **Review Counter:** 0
 **Iteration:** 0
-**Size:** M
+**Size:** L
 
 > **Hydration:** Checkboxes represent meaningful outcomes, not individual code changes. Expand them only when runtime discovery or review feedback requires it.
 
@@ -216,35 +279,12 @@ export function buildImplementationStatus({ taskId, changeSlug, capabilityName }
 
 ---
 
-### Step 1: Implement the approved capability slice
+### Step 1: Complete the capability slice end to end
 **Status:** ⬜ Not Started
 
-- [ ] Apply the requested delta for this capability inside the approved module ownership and edit surface
-- [ ] Implement the approved behavioral semantics and exact failure or edge-case semantics
-- [ ] Preserve all stated constraints and do not alter interfaces beyond the approved delta
-
----
-
-### Step 2: Tests and verification work
-**Status:** ⬜ Not Started
-
-- [ ] Add or update the required tests for this capability, including adversarial coverage
-- [ ] Run targeted validation while iterating on the implementation
-
----
-
-### Step 3: Documentation and examples
-**Status:** ⬜ Not Started
-
-- [ ] Update the required docs and examples for this capability slice
-- [ ] Review adjacent docs or examples listed in the proof obligations and update them if affected
-
----
-
-### Step 4: Repo gates
-**Status:** ⬜ Not Started
-
-- [ ] Run the required repo gates and leave the repository in a fully passing state
+- [ ] Apply the requested delta for this capability inside the approved edit surface and preserve all stated constraints
+- [ ] Finish the slice completely before closing the step: include required code changes, tests, docs/examples, and interface-preservation work together
+- [ ] Run targeted validation while iterating, then run the required repo gates and leave the repository in a fully passing state
 
 ---
 
@@ -288,6 +328,7 @@ export function buildConformancePrompt({
   changeSlug,
   proposalPath,
   designPath,
+  tasksPath,
   specPaths,
   implementationTaskIds,
   conformanceReportPath,
@@ -300,11 +341,11 @@ export function buildConformancePrompt({
 
 **Created:** ${today()}
 **Change:** ${changeSlug}
-**Size:** M
+**Size:** L
 
 ## Review Level: 3 (Full)
 
-**Assessment:** Terminal whole-change conformance packet generated from the approved planner contract.
+**Assessment:** Terminal whole-change conformance packet generated from the approved change contract.
 **Score:** 6/8 — Blast radius: 2, Pattern novelty: 1, Security: 1, Reversibility: 2
 
 ## Canonical Task Folder
@@ -314,6 +355,12 @@ ${renderCanonicalTaskFolder(folderPath)}
 ## Mission
 
 Verify the assembled implementation for \`${changeSlug}\` against the approved proposal, design, and delta specs. This task evaluates whole-change conformance and writes the canonical conformance report. It MUST NOT directly implement fixes.
+
+## Contract References
+
+- \`${proposalPath}\` — approved change intent, scope, and impact
+- \`${designPath}\` — approved design decisions and constraints
+${tasksPath ? `- \`${tasksPath}\` — OpenSpec implementation checklist used during staging\n` : ""}${specPaths.map((specPath) => `- \`${specPath}\` — delta requirements and scenarios`).join("\n")}
 
 ## Dependencies
 
@@ -330,8 +377,8 @@ ${formatDependencyList(
 
 **Tier 3 (load only if needed):**
 - \`${proposalPath}\` — approved change intent and scope boundaries
-- \`${designPath}\` — requested delta, preservation constraints, interface rules, and proof obligations
-${specPaths.map((specPath) => `- \`${specPath}\` — delta requirements and scenarios`).join("\n")}
+- \`${designPath}\` — approved design decisions, interface rules, and proof obligations
+${tasksPath ? `- \`${tasksPath}\` — approved implementation checklist context\n` : ""}${specPaths.map((specPath) => `- \`${specPath}\` — delta requirements and scenarios`).join("\n")}
 
 ## Environment
 
@@ -353,25 +400,15 @@ ${formatPathList(fileScope)}
 
 ## Steps
 
-### Step 0: Load the approved contract
+### Step 0: Load the approved contract and evidence
 
 - [ ] Read proposal, design, delta specs, and relevant Taskplane artifacts
-- [ ] Confirm the implementation packets listed in Dependencies are complete
+- [ ] Confirm the implementation packets listed in Dependencies are complete before evaluating the assembled change
 
-### Step 1: Evaluate delta and preservation conformance
+### Step 1: Verify the whole change and write the report
 
-- [ ] Compare the assembled implementation against the approved requested delta and interface rules
-- [ ] Check preservation constraints, non-regression expectations, docs, examples, and proof strength
-
-### Step 2: Evaluate proof obligations and repo gates
-
-- [ ] Confirm the required tests, including adversarial coverage, are present and aligned with the approved contract
-- [ ] Confirm repo gates and verification outputs support the final verdict
-
-### Step 3: Write the conformance report
-
-- [ ] Write \`${conformanceReportPath}\` with findings, evidence, and an explicit verdict
-- [ ] Use the approved disposition model for every blocking or non-blocking finding
+- [ ] Evaluate the requested delta, interface rules, preservation constraints, tests, docs/examples, and repo-gate evidence as one whole-change pass
+- [ ] Write \`${conformanceReportPath}\` with findings, evidence, and an explicit verdict using the approved disposition model
 
 **Artifacts:**
 ${formatPathList(fileScope)}
@@ -430,41 +467,25 @@ export function buildConformanceStatus({ taskId, changeSlug }) {
 **Review Level:** 3
 **Review Counter:** 0
 **Iteration:** 0
-**Size:** M
+**Size:** L
 
 > **Hydration:** Checkboxes represent meaningful verification outcomes, not every individual inspection step. Expand them only when review feedback or runtime discovery requires it.
 
 ---
 
-### Step 0: Load the approved contract
+### Step 0: Load the approved contract and evidence
 **Status:** ⬜ Not Started
 
 - [ ] Read proposal, design, delta specs, and relevant Taskplane artifacts
-- [ ] Confirm the implementation packets listed in Dependencies are complete
+- [ ] Confirm the implementation packets listed in Dependencies are complete before evaluating the assembled change
 
 ---
 
-### Step 1: Evaluate delta and preservation conformance
+### Step 1: Verify the whole change and write the report
 **Status:** ⬜ Not Started
 
-- [ ] Compare the assembled implementation against the approved requested delta and interface rules
-- [ ] Check preservation constraints, non-regression expectations, docs, examples, and proof strength
-
----
-
-### Step 2: Evaluate proof obligations and repo gates
-**Status:** ⬜ Not Started
-
-- [ ] Confirm the required tests, including adversarial coverage, are present and aligned with the approved contract
-- [ ] Confirm repo gates and verification outputs support the final verdict
-
----
-
-### Step 3: Write the conformance report
-**Status:** ⬜ Not Started
-
-- [ ] Write the conformance report with findings, evidence, and an explicit verdict
-- [ ] Use the approved disposition model for every blocking or non-blocking finding
+- [ ] Evaluate the requested delta, interface rules, preservation constraints, tests, docs/examples, and repo-gate evidence as one whole-change pass
+- [ ] Write the conformance report with findings, evidence, and an explicit verdict using the approved disposition model
 
 ---
 
@@ -539,6 +560,32 @@ function formatDependencyList(items = [], fallback = "- **None**") {
 
 function formatPathList(paths = []) {
   return formatBulletList(paths.map((entry) => `\`${entry}\``));
+}
+
+function formatFileScope(paths = []) {
+  if (paths.length === 0) {
+    return "- Narrow to the minimal implementation files implied by the approved change before editing, and record any scope expansion in STATUS.md.";
+  }
+  return formatPathList(paths);
+}
+
+function formatDocExampleFallback(...sources) {
+  const docPaths = inferPaths(...sources).filter((value) => /(^|\/)(README|docs?)\b|\.md$/i.test(value));
+  return docPaths.length > 0 ? formatPathList(docPaths) : "";
+}
+
+function inferFileScope({ proposalPath, designPath, tasksPath, specPath, ...sources }) {
+  const excluded = new Set([proposalPath, designPath, specPath, tasksPath].filter(Boolean));
+  return inferPaths(...Object.values(sources)).filter((value) => !excluded.has(value));
+}
+
+function inferPaths(...sources) {
+  return uniqueNonEmpty(
+    sources.flatMap((source) => [
+      ...extractBacktickedPaths(source ?? ""),
+      ...extractLikelyPaths(source ?? ""),
+    ]),
+  );
 }
 
 function formatBulletBlock(value, fallback = "- None.") {

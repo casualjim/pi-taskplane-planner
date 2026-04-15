@@ -18,7 +18,7 @@ describe("planner npm package and extension", () => {
     const pkg = JSON.parse(await readProjectFile("package.json"));
 
     expect(pkg.name).toBe("@casualjim/pi-taskplane-planner");
-    expect(pkg.version).toBe("0.2.0");
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(pkg.private).toBe(false);
     expect(pkg.license).toBe("MIT");
     expect(pkg.publishConfig).toEqual({ access: "public" });
@@ -44,6 +44,7 @@ describe("planner npm package and extension", () => {
   });
 
   test("main-branch publish workflows mirror the pi-heimdall flow", async () => {
+    const pkg = JSON.parse(await readProjectFile("package.json"));
     const ci = await readProjectFile(".github/workflows/ci.yml");
     const release = await readProjectFile(".github/workflows/release.yml");
     const lockfile = JSON.parse(await readProjectFile("package-lock.json"));
@@ -71,9 +72,9 @@ describe("planner npm package and extension", () => {
     expect(release).toContain("git push origin HEAD:main");
 
     expect(lockfile.name).toBe("@casualjim/pi-taskplane-planner");
-    expect(lockfile.version).toBe("0.2.0");
+    expect(lockfile.version).toBe(pkg.version);
     expect(lockfile.lockfileVersion).toBe(3);
-    expect(lockfile.packages[""].version).toBe("0.2.0");
+    expect(lockfile.packages[""].version).toBe(pkg.version);
   });
 
   test("planner command specs are loaded from internal prompt assets", () => {

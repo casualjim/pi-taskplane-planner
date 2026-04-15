@@ -5,6 +5,7 @@
 ## Rules
 
 - Read the full approved contract before deciding the verdict.
+- Prefer coarse-grained verification: evaluate the assembled change in one whole-change pass rather than fragmenting the review into many partial phases.
 - Evaluate the implementation against proposal intent, design constraints, delta specs, and proof obligations.
 - Write findings and the explicit verdict to the change conformance report.
 - Do not implement fixes directly from the conformance packet.

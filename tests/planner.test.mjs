@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { archiveChange } from "../src/archive.mjs";
 import { createFinding, parseConformanceVerdict, summarizeFindings } from "../src/conformance.mjs";
+import { extractLikelyPaths } from "../src/markdown.mjs";
 import { reopenChange } from "../src/reopen.mjs";
 import { stageChange } from "../src/stage.mjs";
 import { validateChangeForStaging } from "../src/validate.mjs";
@@ -43,22 +44,84 @@ describe("stage and archive workflow", () => {
 
     const implementationPrompt = await readFile(path.join(cwd, "taskplane-tasks/TP-001-demo-change-demo-capability/PROMPT.md"), "utf8");
     expect(implementationPrompt).toContain("## Canonical Task Folder");
+    expect(implementationPrompt).toContain("## Contract References");
     expect(implementationPrompt).toContain("taskplane-tasks/PHASE-IMPLEMENTATION.md");
     expect(implementationPrompt).not.toContain("taskplane-tasks/PHASE-CONFORMANCE.md");
     expect(implementationPrompt).toContain("## Exact Edit Targets");
     expect(implementationPrompt).toContain("## Documentation Requirements");
     expect(implementationPrompt).toContain("## Git Commit Convention");
+    expect(implementationPrompt).toContain("### Step 1: Complete the capability slice end to end");
+    expect(implementationPrompt).not.toContain("### Step 2: Tests and verification work");
+    expect(implementationPrompt).not.toContain("### Step 3: Documentation and examples");
+    expect(implementationPrompt).not.toContain("### Step 4: Repo gates");
+    expect(implementationPrompt).toContain("Finish the slice completely before closing the step");
     expect(implementationPrompt).toContain("No public or cross-module interface changes are allowed in this change.");
 
+    const implementationStatus = await readFile(path.join(cwd, "taskplane-tasks/TP-001-demo-change-demo-capability/STATUS.md"), "utf8");
+    expect(implementationStatus).toContain("### Step 1: Complete the capability slice end to end");
+    expect(implementationStatus).not.toContain("### Step 2: Tests and verification work");
+
     const verifyPrompt = await readFile(path.join(cwd, "taskplane-tasks/TP-002-verify-demo-change/PROMPT.md"), "utf8");
+    expect(verifyPrompt).toContain("## Contract References");
     expect(verifyPrompt).toContain("## Findings Disposition Rules");
     expect(verifyPrompt).toContain("## File Scope");
+    expect(verifyPrompt).toContain("### Step 1: Verify the whole change and write the report");
+    expect(verifyPrompt).not.toContain("### Step 2: Evaluate proof obligations and repo gates");
+    expect(verifyPrompt).not.toContain("### Step 3: Write the conformance report");
     expect(verifyPrompt).toContain("taskplane-tasks/PHASE-CONFORMANCE.md");
     expect(verifyPrompt).not.toContain("taskplane-tasks/PHASE-IMPLEMENTATION.md");
     expect(verifyPrompt).toContain("openspec/changes/demo-change/conformance.md");
 
+    const verifyStatus = await readFile(path.join(cwd, "taskplane-tasks/TP-002-verify-demo-change/STATUS.md"), "utf8");
+    expect(verifyStatus).toContain("### Step 1: Verify the whole change and write the report");
+    expect(verifyStatus).not.toContain("### Step 2: Evaluate proof obligations and repo gates");
+
     const context = await readFile(path.join(cwd, "taskplane-tasks/CONTEXT.md"), "utf8");
     expect(context).toContain("**Next Task ID:** TP-003");
+  });
+
+  test("stage accepts standard OpenSpec propose artifacts without planner-only headings", async () => {
+    await scaffoldOpenSpecChange(cwd, "standard-change", "demo-capability");
+    await writeStandardApprovedContract(cwd, "standard-change", "demo-capability");
+
+    const validation = await validateChangeForStaging(cwd, "standard-change");
+    expect(validation.valid).toBe(true);
+
+    const result = await stageChange(cwd, "standard-change");
+    expect(result.created).toContain("taskplane-tasks/TP-001-standard-change-demo-capability");
+
+    const implementationPrompt = await readFile(path.join(cwd, "taskplane-tasks/TP-001-standard-change-demo-capability/PROMPT.md"), "utf8");
+    expect(implementationPrompt).toContain("openspec/changes/standard-change/tasks.md");
+    expect(implementationPrompt).toContain("src/standard-change.mjs");
+    expect(implementationPrompt).toContain("tests/standard-change.test.mjs");
+    expect(implementationPrompt).toContain("### Step 1: Complete the capability slice end to end");
+    expect(implementationPrompt).not.toContain("### Step 2: Tests and verification work");
+    expect(implementationPrompt).toContain("Add or update coverage for scenario: Successful stage");
+  });
+
+  test("stage does not reference tasks.md when standard OpenSpec change omits it", async () => {
+    await scaffoldOpenSpecChange(cwd, "standard-no-tasks", "demo-capability");
+    await writeStandardApprovedContract(cwd, "standard-no-tasks", "demo-capability", { includeTasks: false });
+
+    const validation = await validateChangeForStaging(cwd, "standard-no-tasks");
+    expect(validation.valid).toBe(true);
+    expect(validation.tasksPath).toBe("");
+
+    await stageChange(cwd, "standard-no-tasks");
+
+    const implementationPrompt = await readFile(path.join(cwd, "taskplane-tasks/TP-001-standard-no-tasks-demo-capability/PROMPT.md"), "utf8");
+    const verifyPrompt = await readFile(path.join(cwd, "taskplane-tasks/TP-002-verify-standard-no-tasks/PROMPT.md"), "utf8");
+    expect(implementationPrompt).not.toContain("openspec/changes/standard-no-tasks/tasks.md");
+    expect(verifyPrompt).not.toContain("openspec/changes/standard-no-tasks/tasks.md");
+  });
+
+  test("validation accepts resolved Open Questions prose from standard OpenSpec designs", async () => {
+    await scaffoldOpenSpecChange(cwd, "resolved-open-questions", "demo-capability");
+    await writeResolvedOpenQuestionsContract(cwd, "resolved-open-questions", "demo-capability");
+
+    const validation = await validateChangeForStaging(cwd, "resolved-open-questions");
+    expect(validation.valid).toBe(true);
+    expect(validation.errors).toEqual([]);
   });
 
   test("conformance disposition helpers summarize blocking findings correctly", async () => {
@@ -98,6 +161,14 @@ describe("stage and archive workflow", () => {
     });
     expect(syncedSpec).toContain("### Requirement: Demo capability works");
     expect(await exists(path.join(cwd, "openspec/changes/archive", path.basename(result.archivedTo)))).toBe(true);
+  });
+});
+
+describe("markdown helpers", () => {
+  test("extractLikelyPaths ignores prose abbreviations and version strings", () => {
+    expect(extractLikelyPaths("e.g., keep the prose simple")).toEqual([]);
+    expect(extractLikelyPaths("version 0.2.1 is already published")).toEqual([]);
+    expect(extractLikelyPaths("Update README.md and src/index.mjs.")).toEqual(["README.md", "src/index.mjs"]);
   });
 });
 
@@ -192,6 +263,50 @@ async function writeApprovedContract(root, changeSlug, capability) {
   await writeFile(
     path.join(root, `openspec/changes/${changeSlug}/specs/${capability}/spec.md`),
     `## ADDED Requirements\n\n### Requirement: Demo capability works\nThe system SHALL stage planner-native Taskplane packets from approved contracts.\n\n#### Scenario: Successful stage\n- **WHEN** the planner stages an approved change\n- **THEN** it creates implementation and verify packets\n`,
+    "utf8",
+  );
+}
+
+async function writeStandardApprovedContract(root, changeSlug, capability, options = {}) {
+  const { includeTasks = true } = options;
+  await writeFile(
+    path.join(root, `openspec/changes/${changeSlug}/proposal.md`),
+    `## Why\n\nNeed to prove planner staging works directly from standard OpenSpec artifacts.\n\n## What Changes\n\n- Add \`src/standard-change.mjs\` with the implementation for ${changeSlug}\n- Re-export the new capability from \`src/index.mjs\`\n- Add \`tests/standard-change.test.mjs\` covering the new behavior\n\n## Capabilities\n\n### New Capabilities\n- \`${capability}\`: Stage directly from standard OpenSpec proposal, design, specs, and tasks artifacts\n\n### Modified Capabilities\n- None.\n\n## Impact\n\n- \`src/standard-change.mjs\`\n- \`src/index.mjs\`\n- \`tests/standard-change.test.mjs\`\n- \`README.md\`\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, `openspec/changes/${changeSlug}/design.md`),
+    `## Context\n\nThis change is written in the default OpenSpec format produced by \`/opsx:propose\`.\n\n## Goals / Non-Goals\n\n**Goals:**\n- Let \`planner stage\` compile standard OpenSpec artifacts without planner-only headings\n- Keep the staged Taskplane packet explicit enough for execution\n\n**Non-Goals:**\n- Reintroduce a second planner-specific design format\n- Depend on manual post-processing before staging\n\n## Decisions\n\n- Stage from proposal, design, spec, and \`tasks.md\` when planner-only sections are absent\n- Infer file scope from artifact paths already named in proposal impact and task checklist\n\n## Risks / Trade-offs\n\n- If authors omit concrete file paths entirely, staged packets may need to fall back to narrower runtime discovery\n`,
+    "utf8",
+  );
+  if (includeTasks) {
+    await writeFile(
+      path.join(root, `openspec/changes/${changeSlug}/tasks.md`),
+      `## 1. Implementation\n\n- [ ] 1.1 Create \`src/standard-change.mjs\`\n- [ ] 1.2 Re-export the capability from \`src/index.mjs\`\n\n## 2. Verification\n\n- [ ] 2.1 Add \`tests/standard-change.test.mjs\` covering the successful stage scenario\n- [ ] 2.2 Update \`README.md\` if operator-facing behavior changes\n`,
+      "utf8",
+    );
+  }
+  await writeFile(
+    path.join(root, `openspec/changes/${changeSlug}/specs/${capability}/spec.md`),
+    `## ADDED Requirements\n\n### Requirement: Demo capability works\nThe system SHALL stage Taskplane packets from standard OpenSpec artifacts.\n\n#### Scenario: Successful stage\n- **WHEN** the planner stages an approved change created from standard OpenSpec artifacts\n- **THEN** it creates implementation and verify packets without requiring planner-only headings\n`,
+    "utf8",
+  );
+}
+
+async function writeResolvedOpenQuestionsContract(root, changeSlug, capability) {
+  await writeFile(
+    path.join(root, `openspec/changes/${changeSlug}/proposal.md`),
+    `## Why\n\nNeed to prove standard OpenSpec open-question prose is accepted when fully resolved.\n\n## What Changes\n\n- Add \`src/resolved-open-questions.mjs\`\n\n## Impact\n\n- \`src/resolved-open-questions.mjs\`\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, `openspec/changes/${changeSlug}/design.md`),
+    `## Context\n\nThis design uses standard OpenSpec headings.\n\n## Goals / Non-Goals\n\n**Goals:**\n- accept resolved prose in open questions\n\n**Non-Goals:**\n- require planner-only closure headings\n\n## Decisions\n\n- keep the contract in standard OpenSpec form\n\n## Open Questions\n\nNone at the product-contract level for this change. All open questions have been resolved during proposal review.\n\n## Risks / Trade-offs\n\n- keep validation strict for actually unresolved questions\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, `openspec/changes/${changeSlug}/specs/${capability}/spec.md`),
+    `## ADDED Requirements\n\n### Requirement: Resolved open questions still stage\nThe system SHALL accept standard OpenSpec designs whose open-questions section explicitly says there are no remaining contract questions.\n\n#### Scenario: Open questions resolved in prose\n- **WHEN** the design says all contract-level questions are resolved\n- **THEN** staging succeeds\n`,
     "utf8",
   );
 }

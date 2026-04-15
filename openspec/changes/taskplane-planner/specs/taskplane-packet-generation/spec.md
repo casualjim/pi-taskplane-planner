@@ -1,17 +1,18 @@
 ## ADDED Requirements
 
-### Requirement: Approved contracts compile directly to Taskplane packets
-The system SHALL compile approved proposal, design, and delta specs directly
-into Taskplane execution packets.
+### Requirement: Approved OpenSpec contracts compile directly to Taskplane packets
+The system SHALL compile approved proposal, design, and delta specs from
+OpenSpec directly into Taskplane execution packets.
 
 #### Scenario: Canonical execution artifact is a Taskplane packet
 - **WHEN** a change is approved for execution
 - **THEN** the system emits Taskplane `PROMPT.md` and `STATUS.md` packets as the
   canonical execution artifacts
 
-#### Scenario: Planning tasks do not replace Taskplane packets
-- **WHEN** the planner renders a staging preview or task summary
-- **THEN** that preview does not become the canonical execution source of truth
+#### Scenario: Standard OpenSpec output is accepted without planner-only headings
+- **WHEN** the planner stages a change created by `/opsx:propose`
+- **THEN** it compiles the standard OpenSpec proposal, design, specs, and tasks
+  into Taskplane packets without requiring planner-specific sections
 
 ### Requirement: Generated packets carry explicit execution criteria
 The system SHALL generate Taskplane packets that leave no execution-relevant
@@ -27,13 +28,18 @@ proven.
 #### Scenario: Task forbids speculative wording
 - **WHEN** a packet is generated
 - **THEN** its execution steps and completion criteria avoid hypothetical or
-  discretionary wording that would force the worker to invent design intent
+  discretionary wording
 
 #### Scenario: Task states interface impact explicitly
 - **WHEN** a packet affects a public or cross-module interface
 - **THEN** the packet states the approved interface delta explicitly
 - **AND** when no such change exists, the packet states that no public interface
   change is permitted
+
+#### Scenario: Task uses coarse-grained end-to-end steps
+- **WHEN** the planner emits an implementation packet
+- **THEN** it biases toward a small number of large steps rather than many medium steps
+- **AND** tests, documentation, and repo gates are appended to the end-to-end capability step instead of becoming their own separate steps when the slice can be completed together
 
 ### Requirement: Generated packets follow an explicit packet contract
 The system SHALL generate implementation and conformance Taskplane packets with

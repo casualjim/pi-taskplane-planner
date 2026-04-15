@@ -35,6 +35,7 @@ Stage an openspec change — validate the approved contract and compile it into 
    Read all available contract files for the change:
    - `openspec/changes/<name>/proposal.md`
    - `openspec/changes/<name>/design.md`
+   - `openspec/changes/<name>/tasks.md` if it exists
    - `openspec/changes/<name>/specs/*/spec.md`
 
 4. **Show current readiness before staging**
@@ -55,6 +56,8 @@ Stage an openspec change — validate the approved contract and compile it into 
    This creates:
    - one implementation packet per capability spec
    - one terminal conformance packet for the whole change
+
+   The generated Taskplane packets should be coarse-grained: bias toward a small number of large end-to-end steps, and fold tests/docs/repo gates into the same capability step instead of splitting them into separate steps.
 
 6. **Handle results**
 

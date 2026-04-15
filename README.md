@@ -1,53 +1,52 @@
 # @casualjim/pi-taskplane-planner
 
-A planner-native pi extension and CLI companion to Taskplane.
+Glue between OpenSpec long-horizon planning and Taskplane execution.
 
-This project builds a strict planning layer that turns ambiguous change requests
-into explicit contracts and then compiles those contracts into Taskplane-native
-execution packets.
+This package compiles approved OpenSpec change contracts into Taskplane-native
+execution packets, runs whole-change conformance, and archives verified delta
+specs into cumulative truth.
+
+**Planning is done by OpenSpec** (`/opsx:explore`, `/opsx:propose`).
+**Execution is done by Taskplane** (`/orch`).
+**This package bridges the two** — it does not duplicate either.
 
 ## What it provides
 
-- **Planner-native artifact scaffold** under `planning/`
-- **Thin CLI** for bootstrap and maintenance
-  - `planner init`
-  - `planner doctor`
-  - `planner scaffold-change <slug>`
-  - `planner status [change]`
-  - `planner stage <change>`
-  - `planner archive <change>`
-  - `planner reopen <change> [reason]`
-- **Pi extension commands** for day-to-day workflow
-  - `/plan-explore`
-  - `/plan-propose`
-  - `/plan-status`
-  - `/plan-stage`
-  - `/plan-archive`
-  - `/plan-reopen`
-- **Internal prompt assets** under `.pi/prompts/` that back those commands
+- **Pi extension commands** (thin orchestration glue):
+  - `/plan-stage` — validate an approved OpenSpec change and compile it into Taskplane packets
+  - `/plan-archive` — promote passing delta specs into cumulative truth and archive the change
+  - `/plan-reopen` — mark a change as reopened after a contract defect
+- **Thin CLI** for status and packet operations:
+  - `planner status [change]` — inspect staging and conformance state
+  - `planner stage <change>` — compile approved contracts into Taskplane packets
+  - `planner archive <change>` — archive a verified change
+  - `planner reopen <change> [reason]` — reopen after a contract defect
 - **Taskplane packet generation**
-  - one implementation packet per capability spec
-  - one terminal conformance packet per change
+  - one implementation packet per capability spec (coarse-grained, end-to-end steps)
+  - one terminal conformance packet for the whole change
 - **Archive flow** that promotes delta specs into cumulative captured truth
 
-## Planner-native layout
+## Layout
+
+OpenSpec owns the change contract:
 
 ```text
-planning/
+openspec/
   changes/
     <change-slug>/
       proposal.md
       design.md
-      conformance.md
       specs/
         <capability>/spec.md
+      conformance.md          ← written by the conformance Taskplane task
   specs/
-    <capability>/spec.md
-  archive/
-    YYYY-MM-DD-<change-slug>/
+    <capability>/spec.md      ← cumulative truth (synced on archive)
+  changes/
+    archive/
+      YYYY-MM-DD-<change-slug>/
 ```
 
-Taskplane remains the runtime and receives compiled packets under:
+Taskplane owns execution:
 
 ```text
 taskplane-tasks/
@@ -58,10 +57,6 @@ taskplane-tasks/
     PROMPT.md
     STATUS.md
 ```
-
-The phase documents are project-owned Taskplane context files. Planner-generated
-packets reference them so phase behavior lives in Taskplane docs rather than in
-planner-specific runtime prompt logic.
 
 ## Installation
 
@@ -81,49 +76,42 @@ npm install -g @casualjim/pi-taskplane-planner
 
 Then restart or `/reload` pi. Use `pi list` to confirm the package is registered.
 
-## Quickstart
+## Workflow
 
-### 1. Seed planner-native scaffold
-
-```bash
-planner init
-```
-
-### 2. Create a change scaffold
-
-```bash
-planner scaffold-change add-planner-status status-reporting
-```
-
-This creates:
-- `planning/changes/add-planner-status/proposal.md`
-- `planning/changes/add-planner-status/design.md`
-- `planning/changes/add-planner-status/conformance.md`
-- `planning/changes/add-planner-status/specs/status-reporting/spec.md`
-
-### 3. Use planner commands in pi
-
-These commands are registered by the extension you installed above.
-
-Inside `pi`:
+### 1. Plan with OpenSpec
 
 ```text
-/plan-explore add-planner-status
-/plan-propose add-planner-status
-/plan-stage add-planner-status
+/opsx:explore my-change
+/opsx:propose my-change
 ```
 
-### 4. Execute with Taskplane
+This creates `openspec/changes/my-change/` with proposal, design, specs, and tasks.
 
-After staging, run the generated Taskplane packets with `/orch`.
+### 2. Stage into Taskplane packets
 
-### 5. Archive verified truth
+```text
+/plan-stage my-change
+```
+
+This validates the approved contract and compiles it into Taskplane packets under
+`taskplane-tasks/`. Generated packets use coarse-grained end-to-end steps —
+tests, documentation, and repo gates are folded into the implementation step.
+
+### 3. Execute with Taskplane
+
+```text
+/orch taskplane-tasks/TP-001-.../PROMPT.md taskplane-tasks/TP-002-verify-.../PROMPT.md
+```
+
+### 4. Archive verified truth
 
 When conformance passes:
 
 ```bash
-planner archive add-planner-status
+planner archive my-change
 ```
+
+This syncs delta specs into cumulative truth and moves the change into the archive.
 
 ## Development
 
@@ -162,12 +150,11 @@ Publishing is automated through GitHub Actions using the same main-branch publis
 - `Publish` runs on pushes to `main` and manual dispatch
 - if the `package.json` version is not already on npm, the workflow publishes it with trusted publishing
 - after a successful publish, the workflow bumps the patch version on `main` with `[skip ci]` so the repo is ready for the next publish
-- to start a new release line, bump `package.json` and `package-lock.json` to the first unpublished version in that series (currently `0.2.0`)
 - npmjs needs a Trusted Publisher entry for this repo
 - npm trusted publishing means no long-lived npm token secret is needed in GitHub
 
 ## Notes
 
-- OpenSpec content in this repository is bootstrap scaffolding only.
-- The finished planner is intended to operate without requiring OpenSpec at runtime.
-- Taskplane remains the execution and review runtime; this project focuses on producing the best possible Taskplane input.
+- OpenSpec handles all planning: exploration, proposal creation, design, and spec generation.
+- Taskplane handles all execution: worker orchestration, review, and merge.
+- This package only bridges the two — it compiles approved OpenSpec contracts into Taskplane packets, manages conformance, and archives results.

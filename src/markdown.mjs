@@ -52,14 +52,34 @@ export function extractScenarioNames(markdown) {
   return [...markdown.matchAll(/^#### Scenario:\s*(.+)$/gm)].map((match) => match[1].trim());
 }
 
+export function extractChecklistItems(markdown) {
+  return [...markdown.matchAll(/^-\s*\[(?: |x)\]\s+(.+)$/gim)].map((match) => match[1].trim());
+}
+
 export function extractBacktickedPaths(text) {
   return [...text.matchAll(/`([^`]+)`/g)]
     .map((match) => match[1].trim())
-    .filter((value) => value.includes("/") || value.includes("*"));
+    .filter((value) => value.includes("/") || value.includes("*") || /\.[A-Za-z0-9*_-]+$/.test(value));
+}
+
+const LIKELY_PATH_EXTENSIONS = new Set([
+  "c", "cc", "cpp", "cs", "css", "go", "h", "hpp", "html", "ini", "java", "js", "json", "jsx",
+  "kt", "md", "mjs", "php", "py", "rb", "rs", "scala", "sh", "sql", "swift", "toml", "ts", "tsx",
+  "txt", "xml", "yaml", "yml",
+]);
+
+export function extractLikelyPaths(text) {
+  return [...text.matchAll(/(?:^|[\s(\[>])`?((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9*_-]+)`?(?=$|[\s)\].,:;!<])/gm)]
+    .map((match) => match[1]?.trim() ?? "")
+    .filter((value) => isLikelyPathToken(value));
 }
 
 export function uniqueNonEmpty(values) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+export function firstNonEmpty(...values) {
+  return values.find((value) => value?.trim())?.trim() ?? "";
 }
 
 export function toBulletLines(text) {
@@ -67,6 +87,18 @@ export function toBulletLines(text) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.startsWith("-") || line.startsWith("*"));
+}
+
+function isLikelyPathToken(value) {
+  if (!value || value.includes("://")) return false;
+  if (/^\d+(?:\.\d+)+$/.test(value)) return false;
+  if (/^[A-Za-z]\.([A-Za-z])$/i.test(value)) return false;
+
+  const basename = value.split("/").pop() ?? value;
+  if (basename.startsWith(".") && !basename.slice(1).includes(".")) return false;
+
+  const extension = basename.split(".").pop()?.toLowerCase() ?? "";
+  return LIKELY_PATH_EXTENSIONS.has(extension);
 }
 
 function escapeRegExp(value) {
