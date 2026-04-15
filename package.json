@@ -19,9 +19,6 @@
     "bin/",
     "extensions/",
     "src/",
-    ".pi/prompts/plan-explore.md",
-    ".pi/prompts/plan-propose.md",
-    ".pi/prompts/plan-status.md",
     ".pi/prompts/plan-stage.md",
     ".pi/prompts/plan-archive.md",
     ".pi/prompts/plan-reopen.md",
@@ -36,7 +33,7 @@
   "scripts": {
     "build": "bunx tsc --noEmit",
     "test": "bun test",
-    "test:runtime-e2e": "PLANNER_RUNTIME_E2E=1 bun test tests/runtime-e2e.test.mjs"
+    "test:runtime-e2e": "PLANNER_RUNTIME_E2E=1 PLANNER_RUNTIME_E2E_MODEL=openai-codex/gpt-5.4-mini PLANNER_RUNTIME_E2E_THINKING=medium bun test tests/runtime-e2e.test.mjs"
   },
   "engines": {
     "node": ">=24.0.0"

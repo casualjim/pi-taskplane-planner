@@ -1,7 +1,11 @@
 /**
  * Planner Extension
  *
- * Registers the planner workflow as a proper pi extension.
+ * Registers the planner Taskplane compilation commands as a pi extension.
+ * Uses OpenSpec for proposal/design/spec generation and validation.
+ * The planner adds stage (compile to Taskplane packets), archive (with conformance gate),
+ * and reopen (conformance-driven replanning).
+ *
  * The command bodies live in internal prompt assets under .pi/prompts/.
  */
 
@@ -10,9 +14,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const COMMAND_SOURCES = [
-  ["plan-explore", ".pi/prompts/plan-explore.md"],
-  ["plan-propose", ".pi/prompts/plan-propose.md"],
-  ["plan-status", ".pi/prompts/plan-status.md"],
   ["plan-stage", ".pi/prompts/plan-stage.md"],
   ["plan-archive", ".pi/prompts/plan-archive.md"],
   ["plan-reopen", ".pi/prompts/plan-reopen.md"],

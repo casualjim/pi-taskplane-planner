@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseConformanceVerdict } from "./conformance.mjs";
-import { listActiveChanges, getChangeDir, resolveProjectPaths, exists } from "./paths.mjs";
-import { validateChangeContract } from "./validate.mjs";
+import { listActiveChanges, getChangeDir, exists } from "./paths.mjs";
+import { validateChangeForStaging } from "./validate.mjs";
 
 export async function plannerStatus(cwd, changeSlug = null) {
   if (changeSlug) {
@@ -20,7 +20,7 @@ async function describeChange(cwd, changeSlug) {
   const proposalPath = path.join(changeDir, "proposal.md");
   const designPath = path.join(changeDir, "design.md");
   const conformancePath = path.join(changeDir, "conformance.md");
-  const validation = await validateChangeContract(cwd, changeSlug).catch((error) => ({ valid: false, errors: [error.message], specFiles: [] }));
+  const validation = await validateChangeForStaging(cwd, changeSlug).catch((error) => ({ valid: false, errors: [error.message], specFiles: [] }));
   const conformance = (await exists(conformancePath)) ? parseConformanceVerdict(await readFile(conformancePath, "utf8")) : { verdict: null };
   const stagedPackets = await findStagedPackets(cwd, changeSlug);
   return {

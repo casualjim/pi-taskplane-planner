@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseConformanceVerdict } from "./conformance.mjs";
-import { getArchivedChangeDir, getChangeDir, resolveProjectPaths, exists } from "./paths.mjs";
+import { getArchivedChangeDir, getChangeDir, resolveOpenSpecPaths, exists } from "./paths.mjs";
 
 export async function archiveChange(cwd, changeSlug) {
   const changeDir = getChangeDir(cwd, changeSlug);
@@ -34,12 +34,12 @@ export async function archiveChange(cwd, changeSlug) {
   return {
     changeSlug,
     archivedTo: path.relative(cwd, archiveDir),
-    syncedSpecsTo: resolveProjectPaths(cwd).specsDir,
+    syncedSpecsTo: resolveOpenSpecPaths(cwd).specsDir,
   };
 }
 
 export async function syncDeltaSpecs(cwd, changeSlug) {
-  const { specsDir } = resolveProjectPaths(cwd);
+  const { specsDir } = resolveOpenSpecPaths(cwd);
   const changeSpecsDir = path.join(getChangeDir(cwd, changeSlug), "specs");
   await mkdir(specsDir, { recursive: true });
 

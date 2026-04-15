@@ -5,9 +5,8 @@ import path from "node:path";
 import { archiveChange } from "../src/archive.mjs";
 import { createFinding, parseConformanceVerdict, summarizeFindings } from "../src/conformance.mjs";
 import { reopenChange } from "../src/reopen.mjs";
-import { doctorPlanner, initPlanner, scaffoldChange } from "../src/scaffold.mjs";
 import { stageChange } from "../src/stage.mjs";
-import { validateChangeContract } from "../src/validate.mjs";
+import { validateChangeForStaging } from "../src/validate.mjs";
 
 let cwd;
 
@@ -22,29 +21,10 @@ afterEach(async () => {
   }
 });
 
-describe("planner scaffold and validation", () => {
-  test("init and doctor seed planner-native directories", async () => {
-    const init = await initPlanner(cwd);
-    expect(init.ensured).toContain("planning/changes");
-    expect(await exists(path.join(cwd, "taskplane-tasks/PHASE-IMPLEMENTATION.md"))).toBe(true);
-    expect(await exists(path.join(cwd, "taskplane-tasks/PHASE-CONFORMANCE.md"))).toBe(true);
-    const doctor = await doctorPlanner(cwd);
-    expect(doctor.ok).toBe(true);
-  });
-
-  test("scaffold-change creates planner-native contract files", async () => {
-    await initPlanner(cwd);
-    const result = await scaffoldChange(cwd, "demo-change", ["demo-capability"]);
-    expect(result.created).toContain("planning/changes/demo-change/proposal.md");
-    expect(result.created).toContain("planning/changes/demo-change/design.md");
-    expect(result.created).toContain("planning/changes/demo-change/conformance.md");
-    expect(result.created).toContain("planning/changes/demo-change/specs/demo-capability/spec.md");
-  });
-
+describe("planner validation and staging", () => {
   test("validation blocks staging while closure status is unresolved", async () => {
-    await initPlanner(cwd);
-    await scaffoldChange(cwd, "demo-change", ["demo-capability"]);
-    const validation = await validateChangeContract(cwd, "demo-change");
+    await scaffoldOpenSpecChange(cwd, "demo-change", "demo-capability");
+    const validation = await validateChangeForStaging(cwd, "demo-change");
     expect(validation.valid).toBe(false);
     expect(validation.errors.some((error) => error.includes("Design closure status blocks staging"))).toBe(true);
   });
@@ -75,7 +55,7 @@ describe("stage and archive workflow", () => {
     expect(verifyPrompt).toContain("## File Scope");
     expect(verifyPrompt).toContain("taskplane-tasks/PHASE-CONFORMANCE.md");
     expect(verifyPrompt).not.toContain("taskplane-tasks/PHASE-IMPLEMENTATION.md");
-    expect(verifyPrompt).toContain("planning/changes/demo-change/conformance.md");
+    expect(verifyPrompt).toContain("openspec/changes/demo-change/conformance.md");
 
     const context = await readFile(path.join(cwd, "taskplane-tasks/CONTEXT.md"), "utf8");
     expect(context).toContain("**Next Task ID:** TP-003");
@@ -101,7 +81,7 @@ describe("stage and archive workflow", () => {
     await createApprovedChange(cwd, "demo-change", "demo-capability");
     await stageChange(cwd, "demo-change");
 
-    const conformancePath = path.join(cwd, "planning/changes/demo-change/conformance.md");
+    const conformancePath = path.join(cwd, "openspec/changes/demo-change/conformance.md");
     await writeFile(
       conformancePath,
       `# Conformance Report: demo-change\n\n**Status:** Complete\n**Verdict:** ARCHIVE_READY\n\n## Summary\n\nAll checks passed.\n\n## Findings\n\n### CRITICAL\n\n- None.\n\n### WARNING\n\n- None.\n\n### SUGGESTION\n\n- None.\n\n## Evidence\n\n- tests/planner.test.mjs:1\n\n## Disposition\n\n- ARCHIVE_READY\n`,
@@ -109,7 +89,7 @@ describe("stage and archive workflow", () => {
     );
 
     const result = await archiveChange(cwd, "demo-change");
-    const syncedSpec = await readFile(path.join(cwd, "planning/specs/demo-capability/spec.md"), "utf8");
+    const syncedSpec = await readFile(path.join(cwd, "openspec/specs/demo-capability/spec.md"), "utf8");
 
     expect(parseConformanceVerdict(await readFile(path.join(cwd, result.archivedTo, "conformance.md"), "utf8"))).toEqual({
       ok: true,
@@ -117,27 +97,16 @@ describe("stage and archive workflow", () => {
       reason: null,
     });
     expect(syncedSpec).toContain("### Requirement: Demo capability works");
-    expect(await exists(path.join(cwd, "planning/archive", path.basename(result.archivedTo)))).toBe(true);
+    expect(await exists(path.join(cwd, "openspec/changes/archive", path.basename(result.archivedTo)))).toBe(true);
   });
 });
 
 describe("planner CLI end-to-end", () => {
-  test("full CLI flow seeds, stages, and archives a change", async () => {
-    let result = await runPlannerCli(cwd, "init", "--json");
-    expect(result.exitCode).toBe(0);
-    expect(result.json.paths.changesDir).toContain("planning/changes");
-
-    result = await runPlannerCli(cwd, "doctor", "--json");
-    expect(result.exitCode).toBe(0);
-    expect(result.json.ok).toBe(true);
-
-    result = await runPlannerCli(cwd, "scaffold-change", "cli-flow", "demo-capability", "--json");
-    expect(result.exitCode).toBe(0);
-    expect(result.json.changeSlug).toBe("cli-flow");
-
+  test("full CLI flow stages and archives a change", async () => {
+    await scaffoldOpenSpecChange(cwd, "cli-flow", "demo-capability");
     await writeApprovedContract(cwd, "cli-flow", "demo-capability");
 
-    result = await runPlannerCli(cwd, "status", "cli-flow", "--json");
+    let result = await runPlannerCli(cwd, "status", "cli-flow", "--json");
     expect(result.exitCode).toBe(0);
     expect(result.json.contractReady).toBe(true);
     expect(result.json.stagedPackets).toEqual([]);
@@ -155,19 +124,16 @@ describe("planner CLI end-to-end", () => {
 
     result = await runPlannerCli(cwd, "archive", "cli-flow", "--json");
     expect(result.exitCode).toBe(0);
-    expect(result.json.archivedTo).toContain("planning/archive/");
-    expect(await exists(path.join(cwd, "planning/specs/demo-capability/spec.md"))).toBe(true);
+    expect(result.json.archivedTo).toContain("openspec/changes/archive/");
+    expect(await exists(path.join(cwd, "openspec/specs/demo-capability/spec.md"))).toBe(true);
     expect(await exists(path.join(cwd, result.json.archivedTo))).toBe(true);
   });
 
   test("CLI reopen flow marks a change as reopened", async () => {
-    let result = await runPlannerCli(cwd, "init", "--json");
-    expect(result.exitCode).toBe(0);
-    result = await runPlannerCli(cwd, "scaffold-change", "cli-reopen", "demo-capability", "--json");
-    expect(result.exitCode).toBe(0);
+    await scaffoldOpenSpecChange(cwd, "cli-reopen", "demo-capability");
     await writeApprovedContract(cwd, "cli-reopen", "demo-capability");
 
-    result = await runPlannerCli(cwd, "reopen", "cli-reopen", "Contract changed", "--json");
+    const result = await runPlannerCli(cwd, "reopen", "cli-reopen", "Contract changed", "--json");
     expect(result.exitCode).toBe(0);
     expect(result.json.verdict).toBe("REOPEN_PLANNING");
 
@@ -177,25 +143,54 @@ describe("planner CLI end-to-end", () => {
   });
 });
 
+// --- Helpers ---
+
+/** Scaffold an openspec change directory (replaces planner scaffold-change) */
+async function scaffoldOpenSpecChange(root, changeSlug, capability) {
+  const changeDir = path.join(root, "openspec/changes", changeSlug);
+  const specsDir = path.join(changeDir, "specs", capability);
+  await mkdir(specsDir, { recursive: true });
+
+  // Write scaffolded proposal
+  await writeFile(
+    path.join(changeDir, "proposal.md"),
+    `## Why\n\n<!-- motivation -->\n\n## Change Summary\n\n<!-- delta -->\n\n## Scope Boundaries\n\n### In Scope\n\n- <!-- items -->\n\n### Out of Scope\n\n- <!-- items -->\n\n## Spec Impact\n\n### New Capabilities\n\n- \`${capability}\`: <!-- description -->\n\n### Modified Capabilities\n\n- None.\n\n## User / Operator / Interface Impact\n\n<!-- impact -->\n\n## Risks / Constraints\n\n- <!-- risks -->\n`,
+    "utf8",
+  );
+
+  // Write scaffolded design
+  await writeFile(
+    path.join(changeDir, "design.md"),
+    `## Context\n\n<!-- context -->\n\n## Goals / Non-Goals\n\n**Goals:**\n- <!-- goals -->\n\n**Non-Goals:**\n- <!-- non-goals -->\n\n## Key Decisions\n\n### Decision: placeholder\n- **Chosen option:** <!-- option -->\n- **Why:** <!-- reason -->\n- **Rejected alternatives:** <!-- alternatives -->\n\n## Requested Delta\n\n<!-- delta -->\n\n## Preservation Constraints\n\n- <!-- constraints -->\n\n## Public Interface Deltas\n\n<!-- interface deltas -->\n\n## Module Ownership and Edit Surface\n\n- \\\`src/index.mjs\\\` — placeholder\n\n## Behavioral Semantics\n\n<!-- behavior -->\n\n## Failure / Edge Case Semantics\n\n<!-- failure handling -->\n\n## Proof Obligations\n\n### Acceptance\n\n- <!-- acceptance -->\n\n### Non-Regression\n\n- <!-- non-regression -->\n\n### Required Tests\n\n- <!-- tests -->\n\n### Documentation and Examples\n\n- <!-- docs -->\n\n### Repo Gates\n\n- \\\`npm test\\\`\n- \\\`npm run build\\\`\n\n## Risks / Trade-offs\n\n- <!-- risks -->\n\n## Closure Status\n\n- Blockers: TBD\n- Known Unknowns: TBD\n- Deferred Design Choices: TBD\n`,
+    "utf8",
+  );
+
+  // Write scaffolded delta spec
+  await writeFile(
+    path.join(specsDir, "spec.md"),
+    `## ADDED Requirements\n\n### Requirement: ${capability}\nThe system SHALL <!-- requirement -->.\n\n#### Scenario: Successful path\n- **WHEN** <!-- condition -->\n- **THEN** <!-- outcome -->\n`,
+    "utf8",
+  );
+}
+
 async function createApprovedChange(root, changeSlug, capability) {
-  await initPlanner(root);
-  await scaffoldChange(root, changeSlug, [capability]);
+  await scaffoldOpenSpecChange(root, changeSlug, capability);
   await writeApprovedContract(root, changeSlug, capability);
 }
 
 async function writeApprovedContract(root, changeSlug, capability) {
   await writeFile(
-    path.join(root, `planning/changes/${changeSlug}/proposal.md`),
+    path.join(root, `openspec/changes/${changeSlug}/proposal.md`),
     `## Why\n\nNeed a planner-native change contract.\n\n## Change Summary\n\nDeliver a minimal approved planner contract for ${changeSlug}.\n\n## Scope Boundaries\n\n### In Scope\n\n- Planner-native scaffolding\n\n### Out of Scope\n\n- Runtime orchestration rewrites\n\n## Spec Impact\n\n### New Capabilities\n\n- \`${capability}\`: Demonstrate staging and archive behavior\n\n### Modified Capabilities\n\n- None.\n\n## User / Operator / Interface Impact\n\nNo public or cross-module interface changes are permitted in this change.\n\n## Risks / Constraints\n\n- Keep the implementation self-contained.\n`,
     "utf8",
   );
   await writeFile(
-    path.join(root, `planning/changes/${changeSlug}/design.md`),
+    path.join(root, `openspec/changes/${changeSlug}/design.md`),
     `## Context\n\nThis change demonstrates the planner-native compiler path.\n\n## Goals / Non-Goals\n\n**Goals:**\n- Stage valid Taskplane packets\n\n**Non-Goals:**\n- Rebuild Taskplane\n\n## Key Decisions\n\n### Decision: Keep the implementation local\n- **Chosen option:** Store planner artifacts in planner-native paths\n- **Why:** Keep runtime independent from OpenSpec\n- **Rejected alternatives:** Keep OpenSpec as a runtime dependency\n\n## Requested Delta\n\nAdd planner-native contract and packet generation support for ${changeSlug}.\n\n## Preservation Constraints\n\n- Do not weaken tests or docs\n- Do not alter runtime interfaces beyond the approved change contract\n\n## Public Interface Deltas\n\nNo public or cross-module interface changes are allowed in this change.\n\n## Module Ownership and Edit Surface\n\n- \`src/index.mjs\` — export planner-native helpers\n- \`README.md\` — document planner-native workflow\n- \`.pi/prompts/plan-stage.md\` — describe staging behavior\n\n## Behavioral Semantics\n\nThe compiler stages one implementation packet per capability and one verify packet per change.\n\n## Failure / Edge Case Semantics\n\nIf closure status is not fully resolved, staging fails without creating packets.\n\n## Proof Obligations\n\n### Acceptance\n\n- Implementation packet is created\n- Verify packet is created\n\n### Non-Regression\n\n- Taskplane packet metadata remains valid\n\n### Required Tests\n\n- \`bun test\`\n- add adversarial coverage for staging and archive behavior\n\n### Documentation and Examples\n\n- \`README.md\`\n- \`.pi/prompts/plan-stage.md\`\n\n### Repo Gates\n\n- \`npm test\`\n- \`npm run build\`\n\n## Risks / Trade-offs\n\n- Higher upfront planning cost is acceptable.\n\n## Closure Status\n\n- Blockers: None\n- Known Unknowns: None\n- Deferred Design Choices: None\n`,
     "utf8",
   );
   await writeFile(
-    path.join(root, `planning/changes/${changeSlug}/specs/${capability}/spec.md`),
+    path.join(root, `openspec/changes/${changeSlug}/specs/${capability}/spec.md`),
     `## ADDED Requirements\n\n### Requirement: Demo capability works\nThe system SHALL stage planner-native Taskplane packets from approved contracts.\n\n#### Scenario: Successful stage\n- **WHEN** the planner stages an approved change\n- **THEN** it creates implementation and verify packets\n`,
     "utf8",
   );
@@ -241,7 +236,7 @@ async function exists(targetPath) {
 }
 
 async function writeArchiveReadyConformance(root, changeSlug) {
-  const conformancePath = path.join(root, `planning/changes/${changeSlug}/conformance.md`);
+  const conformancePath = path.join(root, `openspec/changes/${changeSlug}/conformance.md`);
   await writeFile(
     conformancePath,
     `# Conformance Report: ${changeSlug}\n\n**Status:** Complete\n**Verdict:** ARCHIVE_READY\n\n## Summary\n\nAll checks passed.\n\n## Findings\n\n### CRITICAL\n\n- None.\n\n### WARNING\n\n- None.\n\n### SUGGESTION\n\n- None.\n\n## Evidence\n\n- tests/planner.test.mjs:1\n\n## Disposition\n\n- ARCHIVE_READY\n`,

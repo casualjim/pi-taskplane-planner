@@ -18,7 +18,7 @@ describe("planner npm package and extension", () => {
     const pkg = JSON.parse(await readProjectFile("package.json"));
 
     expect(pkg.name).toBe("@casualjim/pi-taskplane-planner");
-    expect(pkg.version).toBe("0.1.0");
+    expect(pkg.version).toBe("0.1.1");
     expect(pkg.private).toBe(false);
     expect(pkg.license).toBe("MIT");
     expect(pkg.publishConfig).toEqual({ access: "public" });
@@ -27,9 +27,6 @@ describe("planner npm package and extension", () => {
       "bin/",
       "extensions/",
       "src/",
-      ".pi/prompts/plan-explore.md",
-      ".pi/prompts/plan-propose.md",
-      ".pi/prompts/plan-status.md",
       ".pi/prompts/plan-stage.md",
       ".pi/prompts/plan-archive.md",
       ".pi/prompts/plan-reopen.md",
@@ -68,7 +65,7 @@ describe("planner npm package and extension", () => {
         },
       },
     });
-    expect(releaseManifest).toEqual({ ".": "0.1.0" });
+    expect(releaseManifest).toEqual({ ".": "0.1.1" });
 
     expect(publish).toContain("npm publish --provenance --access public");
     expect(publish).toContain("id-token: write");
@@ -77,19 +74,16 @@ describe("planner npm package and extension", () => {
 
   test("planner command specs are loaded from internal prompt assets", () => {
     expect(plannerCommandSpecs.map((spec) => spec.name)).toEqual([
-      "plan-explore",
-      "plan-propose",
-      "plan-status",
       "plan-stage",
       "plan-archive",
       "plan-reopen",
     ]);
 
-    const explore = plannerCommandSpecs.find((spec) => spec.name === "plan-explore");
-    expect(explore).toBeDefined();
-    expect(explore?.description).toContain("explore mode");
-    expect(explore?.body).toContain("Enter explore mode.");
-    expect(explore?.body.startsWith("---")).toBe(false);
+    const stage = plannerCommandSpecs.find((spec) => spec.name === "plan-stage");
+    expect(stage).toBeDefined();
+    expect(stage?.description).toContain("openspec change");
+    expect(stage?.body).toContain("Taskplane packets");
+    expect(stage?.body.startsWith("---")).toBe(false);
   });
 
   test("default export registers the planner commands", () => {

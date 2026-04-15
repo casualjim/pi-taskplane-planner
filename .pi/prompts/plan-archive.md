@@ -1,8 +1,8 @@
 ---
-description: Archive a planner-native change after conformance passes
+description: Archive an openspec change after conformance passes
 ---
 
-Archive a completed planner-native change.
+Archive a completed openspec change.
 
 **Input**: Optionally specify a change slug. If omitted, infer it from conversation context only when unambiguous. Otherwise prompt for selection.
 
@@ -15,7 +15,7 @@ Archive a completed planner-native change.
    planner status --json
    ```
 
-   Show active changes that still exist under `planning/changes/`.
+   Show active openspec changes that still exist under `openspec/changes/`.
    Prefer changes with conformance reports when presenting options.
 
    **IMPORTANT**: Do NOT guess when multiple active changes exist.
@@ -36,7 +36,7 @@ Archive a completed planner-native change.
 3. **Read the conformance report**
 
    Read:
-   - `planning/changes/<name>/conformance.md`
+   - `openspec/changes/<name>/conformance.md`
 
    Confirm whether the verdict is `ARCHIVE_READY`.
 
@@ -48,11 +48,11 @@ Archive a completed planner-native change.
 4. **Explain spec sync impact**
 
    Planner archive promotes delta specs into cumulative truth under:
-   - `planning/specs/<capability>/spec.md`
+   - `openspec/specs/<capability>/spec.md`
 
    Make it clear that archive both:
    - syncs cumulative specs
-   - moves the change under `planning/archive/YYYY-MM-DD-<name>/`
+   - moves the change under `openspec/changes/archive/YYYY-MM-DD-<name>/`
 
 5. **Perform the archive**
 
@@ -67,7 +67,7 @@ Archive a completed planner-native change.
    - change name
    - archive location
    - cumulative specs updated
-   - note that the change is no longer active under `planning/changes/`
+   - note that the change is no longer active under `openspec/changes/`
 
 **Output On Success**
 
@@ -75,10 +75,10 @@ Archive a completed planner-native change.
 ## Archive Complete
 
 **Change:** <name>
-**Archived to:** planning/archive/YYYY-MM-DD-<name>/
-**Specs:** Synced to `planning/specs/`
+**Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
+**Specs:** Synced to `openspec/specs/`
 
-The planner-native change is archived and cumulative specs now reflect the approved delta.
+The openspec change is archived and cumulative specs now reflect the approved delta.
 ```
 
 **Guardrails**

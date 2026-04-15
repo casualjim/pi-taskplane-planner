@@ -1,8 +1,8 @@
 ---
-description: Reopen a planner-native change when conformance finds a contract defect
+description: Reopen an openspec change when conformance finds a contract defect
 ---
 
-Reopen a planner-native change when verification or remediation shows the approved contract is no longer correct.
+Reopen an openspec change when verification or remediation shows the approved contract is no longer correct.
 
 **Input**: Optionally specify a change slug after `/plan-reopen`. If omitted, infer from context only when safe; otherwise prompt for selection.
 
@@ -18,10 +18,10 @@ Reopen a planner-native change when verification or remediation shows the approv
 2. **Load the current contract and evidence**
 
    Read:
-   - `planning/changes/<name>/proposal.md`
-   - `planning/changes/<name>/design.md`
-   - `planning/changes/<name>/specs/*/spec.md`
-   - `planning/changes/<name>/conformance.md` if present
+   - `openspec/changes/<name>/proposal.md`
+   - `openspec/changes/<name>/design.md`
+   - `openspec/changes/<name>/specs/*/spec.md`
+   - `openspec/changes/<name>/conformance.md` if present
 
 3. **Identify the reason for reopening**
 
@@ -41,9 +41,9 @@ Reopen a planner-native change when verification or remediation shows the approv
    planner reopen "<name>" "<reason>"
    ```
 
-5. **Update the planner artifacts**
+5. **Update the contract artifacts**
 
-   Revise the planner contract so it matches the newly understood truth:
+   Use `/opsx:propose` to revise the openspec contract so it matches the newly understood truth:
    - proposal for scope/intent changes
    - design for interface, preservation, or proof changes
    - delta specs for requirement changes
@@ -52,9 +52,9 @@ Reopen a planner-native change when verification or remediation shows the approv
 
    Summarize:
    - why reopening was necessary
-   - which planner artifacts changed
+   - which artifacts changed
    - whether the user should review before restaging
-   - the next command (`/plan-propose`, `/plan-stage`, or continued exploration)
+   - the next command (`/opsx:propose`, `/plan-stage`, or continued exploration via `/opsx:explore`)
 
 **Guardrails**
 - Do not patch code directly from this command

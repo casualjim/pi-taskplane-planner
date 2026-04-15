@@ -1,7 +1,5 @@
 export * from "./constants.mjs";
 export * from "./paths.mjs";
-export * from "./templates.mjs";
-export * from "./scaffold.mjs";
 export * from "./markdown.mjs";
 export * from "./validate.mjs";
 export * from "./context.mjs";
@@ -11,3 +9,4 @@ export * from "./stage.mjs";
 export * from "./archive.mjs";
 export * from "./reopen.mjs";
 export * from "./status.mjs";
+export { runCli } from "./cli.mjs";

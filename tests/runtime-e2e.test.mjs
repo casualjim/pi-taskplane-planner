@@ -5,18 +5,26 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { archiveChange } from "../src/archive.mjs";
 import { parseConformanceVerdict } from "../src/conformance.mjs";
-import { initPlanner, scaffoldChange } from "../src/scaffold.mjs";
 import { stageChange } from "../src/stage.mjs";
 
 const runtimeEnabled = process.env.PLANNER_RUNTIME_E2E === "1";
 const runtimeTest = runtimeEnabled ? test : test.skip;
+const RUNTIME_E2E_MODEL = process.env.PLANNER_RUNTIME_E2E_MODEL || "openai-codex/gpt-5.4-mini";
+const RUNTIME_E2E_THINKING = process.env.PLANNER_RUNTIME_E2E_THINKING || "medium";
 
 let cwd;
 let spawnedProcesses = [];
+let patchedTaskplaneExecution = null;
+let previousWorkerModelEnv;
+let previousWorkerThinkingEnv;
 
 beforeEach(async () => {
   cwd = await mkdtemp(path.join(os.tmpdir(), "planner-runtime-e2e-"));
   spawnedProcesses = [];
+  previousWorkerModelEnv = process.env.TASKPLANE_WORKER_MODEL;
+  previousWorkerThinkingEnv = process.env.TASKPLANE_WORKER_THINKING;
+  process.env.TASKPLANE_WORKER_MODEL = RUNTIME_E2E_MODEL;
+  process.env.TASKPLANE_WORKER_THINKING = RUNTIME_E2E_THINKING;
 });
 
 afterEach(async () => {
@@ -29,6 +37,14 @@ afterEach(async () => {
     }
   }
   spawnedProcesses = [];
+  if (patchedTaskplaneExecution) {
+    await writeFile(patchedTaskplaneExecution.path, patchedTaskplaneExecution.original, "utf8");
+    patchedTaskplaneExecution = null;
+  }
+  if (previousWorkerModelEnv === undefined) delete process.env.TASKPLANE_WORKER_MODEL;
+  else process.env.TASKPLANE_WORKER_MODEL = previousWorkerModelEnv;
+  if (previousWorkerThinkingEnv === undefined) delete process.env.TASKPLANE_WORKER_THINKING;
+  else process.env.TASKPLANE_WORKER_THINKING = previousWorkerThinkingEnv;
   if (cwd) {
     await rm(cwd, { recursive: true, force: true });
   }
@@ -39,8 +55,7 @@ describe("planner runtime E2E (opt-in)", () => {
     "executes a planner-generated implementation packet through Taskplane and archives after deterministic conformance checks",
     async () => {
       await setupRuntimeRepo(cwd);
-      await initPlanner(cwd);
-      await scaffoldChange(cwd, "runtime-flow", ["runtime-e2e-capability"]);
+      await scaffoldOpenSpecChange(cwd, "runtime-flow", "runtime-e2e-capability");
       await writeRuntimeApprovedContract(cwd, "runtime-flow", "runtime-e2e-capability");
 
       const staged = await stageChange(cwd, "runtime-flow");
@@ -102,14 +117,14 @@ describe("planner runtime E2E (opt-in)", () => {
       spawnedProcesses = spawnedProcesses.filter((proc) => proc !== conformanceProbe);
 
       await writeArchiveReadyConformance(cwd, "runtime-flow");
-      const conformance = await readFile(path.join(cwd, "planning/changes/runtime-flow/conformance.md"), "utf8");
+      const conformance = await readFile(path.join(cwd, "openspec/changes/runtime-flow/conformance.md"), "utf8");
       const verdict = parseConformanceVerdict(conformance);
       expect(verdict.ok).toBe(true);
       expect(verdict.verdict).toBe("ARCHIVE_READY");
 
       const archived = await archiveChange(cwd, "runtime-flow");
       expect(await exists(path.join(cwd, archived.archivedTo))).toBe(true);
-      expect(await exists(path.join(cwd, "planning/specs/runtime-e2e-capability/spec.md"))).toBe(true);
+      expect(await exists(path.join(cwd, "openspec/specs/runtime-e2e-capability/spec.md"))).toBe(true);
       expect(notifications.length).toBeGreaterThan(0);
     },
     10 * 60 * 1000,
@@ -120,9 +135,7 @@ async function setupRuntimeRepo(root) {
   await mkdir(path.join(root, ".pi"), { recursive: true });
   await mkdir(path.join(root, "taskplane-tasks"), { recursive: true });
   await mkdir(path.join(root, "src"), { recursive: true });
-  await mkdir(path.join(root, "tests"), { recursive: true });
-
-  await writeFile(
+  await mkdir(path.join(root, "tests"), { recursive: true });  await writeFile(
     path.join(root, ".pi/taskplane-config.json"),
     JSON.stringify(
       {
@@ -135,6 +148,16 @@ async function setupRuntimeRepo(root) {
               unit: "npm test",
               build: "npm run build",
             },
+          },
+          worker: {
+            model: RUNTIME_E2E_MODEL,
+            thinking: RUNTIME_E2E_THINKING,
+            tools: "read,write,edit,bash,grep,find,ls",
+          },
+          reviewer: {
+            model: RUNTIME_E2E_MODEL,
+            thinking: RUNTIME_E2E_THINKING,
+            tools: "read,bash,grep,find,ls",
           },
           taskAreas: {
             general: {
@@ -204,21 +227,26 @@ async function setupRuntimeRepo(root) {
   await git(root, ["config", "user.name", "Planner Runtime E2E"]);
 }
 
+async function scaffoldOpenSpecChange(root, changeSlug, capability) {
+  const specsDir = path.join(root, `openspec/changes/${changeSlug}/specs/${capability}`);
+  await mkdir(specsDir, { recursive: true });
+}
+
 async function writeRuntimeApprovedContract(root, changeSlug, capability) {
   await writeFile(
-    path.join(root, `planning/changes/${changeSlug}/proposal.md`),
+    path.join(root, `openspec/changes/${changeSlug}/proposal.md`),
     `## Why\n\nWe need a real runtime smoke test that proves the planner can hand Taskplane a change that actually executes.\n\n## Change Summary\n\nAdd a tiny exported marker module and test coverage so planner staging and Taskplane execution can be exercised end to end with a bounded runtime footprint.\n\n## Scope Boundaries\n\n### In Scope\n\n- add a tiny runtime marker export\n- add a test for the new export\n\n### Out of Scope\n\n- rebuild orchestration\n- change existing runtime semantics beyond the new export\n- require the runtime smoke task to also perform final archive verification\n\n## Spec Impact\n\n### New Capabilities\n\n- \`${capability}\`: exercise planner staging and Taskplane runtime execution end to end\n\n### Modified Capabilities\n\n- None.\n\n## User / Operator / Interface Impact\n\nThe root module gains a new exported constant named \`RUNTIME_E2E_MARKER\`.\n\n## Risks / Constraints\n\n- Keep the change tiny so runtime execution stays deterministic and time-bounded.\n`,
     "utf8",
   );
 
   await writeFile(
-    path.join(root, `planning/changes/${changeSlug}/design.md`),
+    path.join(root, `openspec/changes/${changeSlug}/design.md`),
     `## Context\n\nThis change is a runtime integration fixture for the planner and Taskplane.\n\n## Goals / Non-Goals\n\n**Goals:**\n- prove a staged implementation packet can execute through Taskplane\n- preserve the existing root export\n\n**Non-Goals:**\n- rebuild Taskplane\n- introduce additional abstractions\n- require the runtime smoke path to execute whole-change conformance in the same opt-in test\n\n## Key Decisions\n\n### Decision: Use a tiny export and focused regression test\n- **Chosen option:** add a single new export and one dedicated test file\n- **Why:** this keeps runtime execution small and verifiable\n- **Rejected alternatives:** broad implementation tasks that would make runtime e2e flaky or slow\n\n## Requested Delta\n\nCreate \`src/runtime-e2e.mjs\` exporting \`RUNTIME_E2E_MARKER = \"runtime-e2e\"\`, re-export that constant from \`src/index.mjs\`, and add \`tests/runtime-e2e.generated.test.mjs\` covering the new export and the existing export.\n\n## Preservation Constraints\n\n- keep \`EXISTING_VALUE\` exported from \`src/index.mjs\` unchanged\n- do not change package scripts\n- do not weaken existing tests\n\n## Public Interface Deltas\n\n- Old: \`src/index.mjs\` exports only \`EXISTING_VALUE\`\n- New: \`src/index.mjs\` also exports \`RUNTIME_E2E_MARKER\`\n- Existing consumers of \`EXISTING_VALUE\` remain fully compatible\n\n## Module Ownership and Edit Surface\n\n- \`src/runtime-e2e.mjs\` — new module that owns the marker constant\n- \`src/index.mjs\` — re-export the new constant while preserving the old export\n- \`tests/runtime-e2e.generated.test.mjs\` — assert the new export and preserve the existing export behavior\n\n## Behavioral Semantics\n\nThe root module exports \`RUNTIME_E2E_MARKER\` with the exact string value \`runtime-e2e\` and continues exporting \`EXISTING_VALUE\` unchanged.\n\n## Failure / Edge Case Semantics\n\nIf the new module is missing or not re-exported correctly, the generated runtime test must fail.\n\n## Proof Obligations\n\n### Acceptance\n\n- \`src/runtime-e2e.mjs\` exists and exports \`RUNTIME_E2E_MARKER = \"runtime-e2e\"\`\n- \`src/index.mjs\` re-exports \`RUNTIME_E2E_MARKER\`\n\n### Non-Regression\n\n- \`EXISTING_VALUE\` remains exported and equal to \`existing\`\n- package scripts remain unchanged\n\n### Required Tests\n\n- add \`tests/runtime-e2e.generated.test.mjs\` covering the new export and existing export\n- run \`npm test\`\n\n### Documentation and Examples\n\n- None required for this runtime smoke fixture.\n\n### Repo Gates\n\n- \`npm test\`\n- \`npm run build\`\n\n## Risks / Trade-offs\n\n- This fixture favors determinism over breadth.\n\n## Closure Status\n\n- Blockers: None\n- Known Unknowns: None\n- Deferred Design Choices: None\n`,
     "utf8",
   );
 
   await writeFile(
-    path.join(root, `planning/changes/${changeSlug}/specs/${capability}/spec.md`),
+    path.join(root, `openspec/changes/${changeSlug}/specs/${capability}/spec.md`),
     `## ADDED Requirements\n\n### Requirement: Runtime E2E marker export exists\nThe system SHALL expose a root export named \`RUNTIME_E2E_MARKER\` with the exact value \`runtime-e2e\`.\n\n#### Scenario: Successful runtime e2e export\n- **WHEN** a consumer imports \`RUNTIME_E2E_MARKER\` from the root module\n- **THEN** the value equals \`runtime-e2e\`\n\n### Requirement: Existing export remains stable\nThe system SHALL preserve the existing root export while adding the runtime e2e marker.\n\n#### Scenario: Existing export still works\n- **WHEN** a consumer imports \`EXISTING_VALUE\` from the root module\n- **THEN** the value still equals \`existing\`\n`,
     "utf8",
   );
@@ -226,7 +254,7 @@ async function writeRuntimeApprovedContract(root, changeSlug, capability) {
 
 async function writeArchiveReadyConformance(root, changeSlug) {
   await writeFile(
-    path.join(root, `planning/changes/${changeSlug}/conformance.md`),
+    path.join(root, `openspec/changes/${changeSlug}/conformance.md`),
     `# Conformance Report: ${changeSlug}\n\n**Status:** Complete\n**Verdict:** ARCHIVE_READY\n\n## Summary\n\nThe runtime smoke fixture passed deterministic post-integration checks. The planner-generated implementation packet executed through Taskplane, the resulting orch branch was fast-forward integrated, and the expected code and test artifacts were present afterward.\n\n## Findings\n\n### CRITICAL\n\n- None.\n\n### WARNING\n\n- None.\n\n### SUGGESTION\n\n- None.\n\n## Evidence\n\n- src/runtime-e2e.mjs\n- src/index.mjs\n- tests/runtime-e2e.generated.test.mjs\n\n## Disposition\n\n- ARCHIVE_READY\n`,
     "utf8",
   );
@@ -264,6 +292,8 @@ async function loadTaskplaneRuntime() {
   const realBin = (await new Response(realBinProc.stdout).text()).trim();
   const taskplaneRoot = path.dirname(path.dirname(realBin));
 
+  await patchTaskplaneWorkerModelSupport(taskplaneRoot);
+
   const engine = await import(pathToFileURL(path.join(taskplaneRoot, "extensions/taskplane/engine.ts")).href);
   const config = await import(pathToFileURL(path.join(taskplaneRoot, "extensions/taskplane/config.ts")).href);
   const types = await import(pathToFileURL(path.join(taskplaneRoot, "extensions/taskplane/types.ts")).href);
@@ -277,12 +307,52 @@ async function loadTaskplaneRuntime() {
   };
 }
 
+async function patchTaskplaneWorkerModelSupport(taskplaneRoot) {
+  const executionPath = path.join(taskplaneRoot, "extensions/taskplane/execution.ts");
+  const original = await readFile(executionPath, "utf8");
+  if (original.includes("TASKPLANE_WORKER_MODEL")) {
+    if (!patchedTaskplaneExecution) {
+      patchedTaskplaneExecution = { path: executionPath, original };
+    }
+    return;
+  }
+
+  const patched = original
+    .replace(
+      'workerModel: "",',
+      'workerModel: process.env.TASKPLANE_WORKER_MODEL || extraEnvVars?.TASKPLANE_WORKER_MODEL || "",',
+    )
+    .replace(
+      'workerThinking: "",',
+      'workerThinking: process.env.TASKPLANE_WORKER_THINKING || extraEnvVars?.TASKPLANE_WORKER_THINKING || "",',
+    );
+
+  if (patched === original) {
+    throw new Error("Failed to patch taskplane execution.ts for worker model support");
+  }
+
+  await writeFile(executionPath, patched, "utf8");
+  patchedTaskplaneExecution = { path: executionPath, original };
+}
+
 function spawnTaskplaneBatch(root, taskplaneRoot, promptPath) {
   const script = `
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+process.env.TASKPLANE_WORKER_MODEL = ${JSON.stringify(RUNTIME_E2E_MODEL)};
+process.env.TASKPLANE_WORKER_THINKING = ${JSON.stringify(RUNTIME_E2E_THINKING)};
+
 const [root, taskplaneRoot, promptPath] = process.argv.slice(1);
+const executionPath = path.join(taskplaneRoot, "extensions/taskplane/execution.ts");
+const fs = await import("node:fs/promises");
+let executionSource = await fs.readFile(executionPath, "utf8");
+if (!executionSource.includes("TASKPLANE_WORKER_MODEL")) {
+  executionSource = executionSource
+    .replace('workerModel: "",', 'workerModel: process.env.TASKPLANE_WORKER_MODEL || extraEnvVars?.TASKPLANE_WORKER_MODEL || "",')
+    .replace('workerThinking: "",', 'workerThinking: process.env.TASKPLANE_WORKER_THINKING || extraEnvVars?.TASKPLANE_WORKER_THINKING || "",');
+  await fs.writeFile(executionPath, executionSource, "utf8");
+}
 const engine = await import(pathToFileURL(path.join(taskplaneRoot, "extensions/taskplane/engine.ts")).href);
 const config = await import(pathToFileURL(path.join(taskplaneRoot, "extensions/taskplane/config.ts")).href);
 const types = await import(pathToFileURL(path.join(taskplaneRoot, "extensions/taskplane/types.ts")).href);

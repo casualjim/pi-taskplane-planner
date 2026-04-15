@@ -1,8 +1,8 @@
 ---
-description: Validate a planner-native change contract and compile it into Taskplane packets
+description: Validate an openspec change contract and compile it into Taskplane packets
 ---
 
-Stage a planner-native change — validate the approved contract and compile it into Taskplane packets.
+Stage an openspec change — validate the approved contract and compile it into Taskplane packets.
 
 **Input**: Optionally specify a change slug after `/plan-stage`. If omitted, infer it from conversation context when safe. If ambiguous, prompt for selection.
 
@@ -12,36 +12,36 @@ Stage a planner-native change — validate the approved contract and compile it 
 
    If a change slug is provided, use it. Otherwise:
    - infer from conversation context if the user mentioned a change
-   - auto-select if only one active planner change exists
-   - if ambiguous, run `planner status --json` and use the **AskUserQuestion tool** to let the user select
+   - auto-select if only one active openspec change exists
+   - if ambiguous, run `openspec list --json` and use the **AskUserQuestion tool** to let the user select
 
    Always announce: `Using change: <name>` and how to override.
 
-2. **Check planner status to understand readiness**
+2. **Check openspec and planner status**
 
    ```bash
+   openspec status --change "<name>" --json
    planner status "<name>" --json
    ```
 
-   Parse the JSON to understand:
-   - whether the proposal exists
-   - whether the design exists
-   - which delta specs exist
-   - whether the contract is currently ready
+   Parse to understand:
+   - whether the proposal, design, and specs are done in openspec
+   - whether the planner considers the contract ready for staging
    - whether Taskplane packets were already staged
+   - any validation errors
 
 3. **Read the contract artifacts**
 
-   Read all available planner contract files for the change:
-   - `planning/changes/<name>/proposal.md`
-   - `planning/changes/<name>/design.md`
-   - `planning/changes/<name>/specs/*/spec.md`
+   Read all available contract files for the change:
+   - `openspec/changes/<name>/proposal.md`
+   - `openspec/changes/<name>/design.md`
+   - `openspec/changes/<name>/specs/*/spec.md`
 
 4. **Show current readiness before staging**
 
    Display:
-   - contract readiness
-   - missing or invalid artifacts
+   - openspec artifact completion status
+   - planner validation result (closure status, spec existence)
    - any already-staged packet folders
    - what will happen next if staging succeeds
 
@@ -52,15 +52,15 @@ Stage a planner-native change — validate the approved contract and compile it 
    planner stage "<name>" --json
    ```
 
-   This should create:
-   - one implementation packet per capability
+   This creates:
+   - one implementation packet per capability spec
    - one terminal conformance packet for the whole change
 
 6. **Handle results**
 
    **If staging fails:**
    - explain the validation errors clearly
-   - point back to the exact planner artifacts that need revision
+   - point back to the exact artifacts that need revision
    - stop; do not silently patch the contract during staging
 
    **If staging succeeds:**
@@ -101,11 +101,11 @@ Run:
 - <error 1>
 - <error 2>
 
-Update the planner contract, then rerun `/plan-stage <name>`.
+Update the contract using `/opsx:propose`, then rerun `/plan-stage <name>`.
 ```
 
 **Guardrails**
 - Always read the contract before staging
-- Do not silently fix planner defects during staging
-- If the approved contract is incomplete, stop and send the user back to proposal/design/spec updates
-- Keep the distinction clear: planner artifacts are change truth, Taskplane packets are execution manifests
+- Do not silently fix defects during staging
+- If the contract is incomplete, stop and send the user back to `/opsx:propose` to update proposal/design/specs
+- Keep the distinction clear: openspec artifacts are change truth, Taskplane packets are execution manifests

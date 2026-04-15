@@ -3,11 +3,11 @@ import path from "node:path";
 import { allocateTaskIds, ensureTaskplanePhaseDocs, getPhaseContextPath } from "./context.mjs";
 import { getSection } from "./markdown.mjs";
 import { buildConformancePrompt, buildConformanceStatus, buildImplementationPrompt, buildImplementationStatus, writeTaskPacket } from "./taskplane.mjs";
-import { validateChangeContract } from "./validate.mjs";
+import { validateChangeForStaging } from "./validate.mjs";
 import { getChangeDir, exists } from "./paths.mjs";
 
 export async function stageChange(cwd, changeSlug) {
-  const validation = await validateChangeContract(cwd, changeSlug);
+  const validation = await validateChangeForStaging(cwd, changeSlug);
   if (!validation.valid) {
     const error = new Error(`Cannot stage ${changeSlug}; contract validation failed.`);
     error.details = validation.errors;
@@ -63,7 +63,7 @@ export async function stageChange(cwd, changeSlug) {
     designPath: path.relative(cwd, validation.designPath).replace(/\\/g, "/"),
     specPaths: specEntries.map((entry) => path.relative(cwd, entry.specPath).replace(/\\/g, "/")),
     implementationTaskIds: ids.slice(0, -1),
-    conformanceReportPath: `planning/changes/${changeSlug}/conformance.md`,
+    conformanceReportPath: `openspec/changes/${changeSlug}/conformance.md`,
     areaContextPath: area.context,
     phaseContextPath: getPhaseContextPath(area.context, "conformance"),
   });

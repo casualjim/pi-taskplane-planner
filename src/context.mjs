@@ -7,32 +7,7 @@ import {
   DEFAULT_TASK_ROOT,
   IMPLEMENTATION_PHASE_CONTEXT_FILE,
 } from "./constants.mjs";
-import { exists } from "./paths.mjs";
-
-export async function loadTaskArea(cwd) {
-  const configPath = path.join(cwd, ".pi", "taskplane-config.json");
-  if (await exists(configPath)) {
-    const raw = await readFile(configPath, "utf8");
-    const config = JSON.parse(raw);
-    const areas = config?.taskRunner?.taskAreas ?? {};
-    const [name, area] = Object.entries(areas)[0] ?? [];
-    if (name && area) {
-      return {
-        name,
-        path: area.path,
-        prefix: area.prefix,
-        context: area.context,
-      };
-    }
-  }
-
-  return {
-    name: "general",
-    path: DEFAULT_TASK_ROOT,
-    prefix: DEFAULT_TASK_PREFIX,
-    context: DEFAULT_TASK_CONTEXT,
-  };
-}
+import { exists, loadTaskArea } from "./paths.mjs";
 
 export function getPhaseContextPath(areaContextPath, phase) {
   const filename = phase === "conformance"
