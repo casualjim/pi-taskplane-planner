@@ -18,7 +18,7 @@ describe("planner npm package and extension", () => {
     const pkg = JSON.parse(await readProjectFile("package.json"));
 
     expect(pkg.name).toBe("@casualjim/pi-taskplane-planner");
-    expect(pkg.version).toBe("0.1.1");
+    expect(pkg.version).toBe("0.2.0");
     expect(pkg.private).toBe(false);
     expect(pkg.license).toBe("MIT");
     expect(pkg.publishConfig).toEqual({ access: "public" });
@@ -38,38 +38,42 @@ describe("planner npm package and extension", () => {
     expect(pkg.homepage).toContain("github.com/casualjim/pi-taskplane-planner");
     expect(pkg.bugs.url).toContain("github.com/casualjim/pi-taskplane-planner/issues");
     expect(pkg.engines.node).toBe(">=24.0.0");
+    expect(pkg.scripts.build).toBe("tsc --noEmit");
+    expect(pkg.scripts.typecheck).toBe("tsc --noEmit");
+    expect(pkg.scripts["check:pack"]).toBe("npm pack --dry-run");
   });
 
-  test("release automation workflows and bootstrap config exist", async () => {
+  test("main-branch publish workflows mirror the pi-heimdall flow", async () => {
     const ci = await readProjectFile(".github/workflows/ci.yml");
-    const releasePlease = await readProjectFile(".github/workflows/release-please.yml");
-    const publish = await readProjectFile(".github/workflows/publish.yml");
-    const releaseConfig = JSON.parse(await readProjectFile("release-please-config.json"));
-    const releaseManifest = JSON.parse(await readProjectFile(".release-please-manifest.json"));
+    const release = await readProjectFile(".github/workflows/release.yml");
+    const lockfile = JSON.parse(await readProjectFile("package-lock.json"));
 
-    expect(ci).toContain("bun install");
-    expect(ci).toContain("bun test");
-    expect(ci).toContain("bunx tsc --noEmit");
+    await expect(readProjectFile(".github/workflows/publish.yml")).rejects.toThrow();
+    await expect(readProjectFile(".github/workflows/release-please.yml")).rejects.toThrow();
+    await expect(readProjectFile("release-please-config.json")).rejects.toThrow();
+    await expect(readProjectFile(".release-please-manifest.json")).rejects.toThrow();
 
-    expect(releasePlease).toContain("workflow_run");
-    expect(releasePlease).toContain("conclusion == 'success'");
-    expect(releasePlease).toContain("googleapis/release-please-action@v4");
-    expect(releasePlease).toContain("config-file: release-please-config.json");
-    expect(releasePlease).toContain("manifest-file: .release-please-manifest.json");
+    expect(ci).toContain("pull_request");
+    expect(ci).toContain("workflow_dispatch");
+    expect(ci).not.toContain("push:");
+    expect(ci).toContain("actions/setup-node@v6");
+    expect(ci).toContain("npm ci");
+    expect(ci).toContain("npm run typecheck");
+    expect(ci).toContain("npm run check:pack");
 
-    expect(releaseConfig).toEqual({
-      packages: {
-        ".": {
-          "release-type": "node",
-          "bump-patch-for-minor-pre-major": true,
-        },
-      },
-    });
-    expect(releaseManifest).toEqual({ ".": "0.1.1" });
+    expect(release).toContain("push:");
+    expect(release).toContain("branches: [main]");
+    expect(release).toContain("workflow_dispatch");
+    expect(release).toContain("contains(github.event.head_commit.message, '[skip ci]')");
+    expect(release).toContain("npm view");
+    expect(release).toContain("npm publish --provenance --access public");
+    expect(release).toContain("npm version patch --no-git-tag-version");
+    expect(release).toContain("git push origin HEAD:main");
 
-    expect(publish).toContain("npm publish --provenance --access public");
-    expect(publish).toContain("id-token: write");
-    expect(publish).toContain("registry.npmjs.org");
+    expect(lockfile.name).toBe("@casualjim/pi-taskplane-planner");
+    expect(lockfile.version).toBe("0.2.0");
+    expect(lockfile.lockfileVersion).toBe(3);
+    expect(lockfile.packages[""].version).toBe("0.2.0");
   });
 
   test("planner command specs are loaded from internal prompt assets", () => {

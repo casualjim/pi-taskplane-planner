@@ -133,11 +133,14 @@ Run tests:
 npm test
 ```
 
-Run typecheck/build gate:
+Run the Node-based package gate used by CI/publishing:
 
 ```bash
-npm run build
+npm run typecheck
+npm run check:pack
 ```
+
+`npm run build` remains an alias for the typecheck gate.
 
 Optional runtime E2E (requires a working local Taskplane + pi runtime environment and model/API access):
 
@@ -153,13 +156,13 @@ the change.
 
 ## Publishing
 
-Publishing is automated through GitHub Actions:
+Publishing is automated through GitHub Actions using the same main-branch publish flow as `../pi-heimdall`:
 
-- `release-please` opens version bump PRs after the `CI` workflow succeeds on `main`
-- the release config uses `release-please-config.json` plus `.release-please-manifest.json` to bootstrap the package at `0.1.0`
-- pre-1.0 release versions stay patch-only for feature commits (`bump-patch-for-minor-pre-major`)
-- merging the release PR creates the tag and GitHub Release
-- the published release triggers `npm publish` with trusted publishing
+- `CI` runs on pull requests and manual dispatch with `npm ci`, `npm run typecheck`, and `npm run check:pack`
+- `Publish` runs on pushes to `main` and manual dispatch
+- if the `package.json` version is not already on npm, the workflow publishes it with trusted publishing
+- after a successful publish, the workflow bumps the patch version on `main` with `[skip ci]` so the repo is ready for the next publish
+- to start a new release line, bump `package.json` and `package-lock.json` to the first unpublished version in that series (currently `0.2.0`)
 - npmjs needs a Trusted Publisher entry for this repo
 - npm trusted publishing means no long-lived npm token secret is needed in GitHub
 
